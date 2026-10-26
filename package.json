@@ -1,0 +1,80 @@
+{
+  "name": "yuze-market",
+  "version": "0.3.0",
+  "description": "Yuze-市场：技能、专家、连接器与插件的一体化市场（DSH 插件）",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./lib/client.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml"
+  ],
+  "dsh": {
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-sidebar"
+      ],
+      "external": [
+        "@deepseek-ai/dsh-client-ui-primitives"
+      ],
+      "platform": "web"
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "build": "node scripts/clean.mjs && tsdown && vite build --config vite.client.config.ts && tsc -p tsconfig.json --emitDeclarationOnly && tsc -p tsconfig.client.json --emitDeclarationOnly",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json --noEmit",
+    "verify:loader": "node scripts/verify-client-loader.mjs",
+    "verify:exports": "node scripts/verify-package-exports.mjs",
+    "verify:oauth": "tsc -p tsconfig.test.json && node scripts/verify-oauth-flow.mjs",
+    "check": "npm run build && npm run typecheck && npm run verify:exports && npm run verify:loader && npm run verify:oauth && npm run verify:api && npm run verify:ui",
+    "prepack": "npm run check",
+    "verify:api": "tsc -p tsconfig.test.json && node scripts/verify-market-api.mjs",
+    "verify:ui": "tsc -p tsconfig.domtest.json && node scripts/verify-ui.mjs",
+    "sync:experts": "node scripts/sync-workbuddy-experts.mjs",
+    "sync:skills": "node scripts/sync-workbuddy-skills.mjs",
+    "merge:zh": "node scripts/merge-skill-translations.mjs"
+  },
+  "dependencies": {
+    "tar": "^7.4.3",
+    "yauzl": "^3.2.0",
+    "zod": "^4.4.3"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "4.0.4 || 4.0.5-alpha.1",
+    "react": "18.3.1"
+  },
+  "license": "MIT",
+  "private": false,
+  "devDependencies": {
+    "@deepseek-ai/dsh-client-locale": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-layout": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.0-rc.2",
+    "@types/node": "^24.13.0",
+    "@types/react": "~18.3.1",
+    "@types/react-dom": "~18.3.0",
+    "@types/yauzl": "^3.4.0",
+    "@vitejs/plugin-react": "^5.0.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tsdown": "^0.15.6",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.12"
+  }
+}

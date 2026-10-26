@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.client.json",
+  "compilerOptions": {
+    "declaration": false,
+    "emitDeclarationOnly": false,
+    "outDir": "scratch/out",
+    "rootDir": "src"
+  }
+}
