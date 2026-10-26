@@ -16,7 +16,6 @@ import { createServer } from 'node:http'
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { execFileSync } from 'node:child_process'
 import { createReadStream } from 'node:fs'
 
 import { Aggregator } from '../scratch/server-out/aggregate.js'
@@ -24,6 +23,7 @@ import { installMarketExpert } from '../scratch/server-out/market-expert-install
 import { MarketApiClient } from '../scratch/server-out/market-api.js'
 import { MarketCatalog } from '../scratch/server-out/wb/catalog.js'
 import { mountUnifiedRoutes } from '../scratch/server-out/unified-routes.js'
+import { writeZip } from './lib/minizip.mjs'
 
 const HOME = join(process.cwd(), 'scratch', 'api-home')
 const SKILL_ROOT = join(HOME, 'skills')
@@ -555,8 +555,15 @@ try {
       join(pkg, 'agents', 'test.md'),
       '---\nname: whatever\ndescription: 来自云端包的专家\n---\n\n你是测试专家。\n',
     )
+    // Store-only zip written in-process: `zip` does not exist on Windows runners.
     const zipPath = join(HOME, 'expert.zip')
-    execFileSync('zip', ['-qr', zipPath, '.'], { cwd: pkg })
+    await writeZip(zipPath, [
+      {
+        name: '.codebuddy-plugin/plugin.json',
+        data: JSON.stringify({ agentName: 'cloud-install-test', agents: ['./agents/test.md'], version: '9.9.9' }),
+      },
+      { name: 'agents/test.md', data: '---\nname: whatever\ndescription: 来自云端包的专家\n---\n\n你是测试专家。\n' },
+    ])
 
     const fileServer = createServer((request, response) => {
       response.setHeader('content-type', 'application/zip')
