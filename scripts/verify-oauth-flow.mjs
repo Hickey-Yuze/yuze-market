@@ -269,8 +269,13 @@ try {
     check('daysLeft 有值', typeof body.daysLeft === 'number', body.daysLeft)
     check('scope 保留', body.scope === 'demo:read', body.scope)
     const file = join(HOME, 'secrets', 'mcp-oauth', 'demo.json')
-    const mode = (await stat(file)).mode & 0o777
-    check('token 文件 0600', mode === 0o600, mode.toString(8))
+    // Windows has no POSIX mode bits: stat reports 666 for every file.
+    if (process.platform === 'win32') {
+      check('token 文件权限（Windows 无 POSIX 权限，跳过）', true)
+    } else {
+      const mode = (await stat(file)).mode & 0o777
+      check('token 文件 0600', mode === 0o600, mode.toString(8))
+    }
     const record = JSON.parse(await readFile(file, 'utf8'))
     check('落盘含 refresh_token', typeof record.refreshToken === 'string')
   }

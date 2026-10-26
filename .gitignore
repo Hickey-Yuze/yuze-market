@@ -2,7 +2,7 @@
 node_modules/
 
 # build output (rebuilt by `pnpm build`, shipped as a release tarball)
-lib/
+/lib/
 
 # local test scaffolds and probes
 scratch/
