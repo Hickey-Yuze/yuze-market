@@ -1,0 +1,16 @@
+# dependencies
+node_modules/
+
+# build output (rebuilt by `pnpm build`, shipped as a release tarball)
+lib/
+
+# local test scaffolds and probes
+scratch/
+.smoke*/
+
+# packed plugin tarballs
+*.tgz
+
+# tooling
+.DS_Store
+*.log
