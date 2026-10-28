@@ -7,7 +7,7 @@
  * written into `cordis.patch.yml`), so the flow runs here and the panel only
  * opens the authorization URL and polls status.
  *
- * Routes (mounted under `/api/qurwork-market/oauth`):
+ * Routes (mounted under `/api/yuze-market/oauth`):
  *
  * - `GET  /status?server=<name>` — current authorization state.
  * - `POST /start`                — begin a flow, returns the URL to open.
@@ -20,7 +20,7 @@ import { OAuthBroker, discover } from './flow.js'
 import { isExpired, type OAuthTokenRecord, TokenStore } from './store.js'
 import type { InstallResult } from '../wb/types.js'
 
-export const OAUTH_ROUTE_PREFIX = '/api/qurwork-market/oauth'
+export const OAUTH_ROUTE_PREFIX = '/api/yuze-market/oauth'
 
 export interface OAuthDeps {
   readonly dshHome: string

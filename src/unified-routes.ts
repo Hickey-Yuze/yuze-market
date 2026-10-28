@@ -1,7 +1,7 @@
 /**
  * The 市场 API: one surface for four tabs, under its own prefix.
  *
- * The older `/api/qurwork-market/*` and `/api/workbuddy-market/*` routes stay
+ * The older `/api/yuze-market/*` and `/api/workbuddy-market/*` routes stay
  * as they are (installs and receipts already work through them), but the panel
  * talks to this one because everything it needs is keyed by a single id:
  *

@@ -201,7 +201,7 @@ await mkdir(HOME, { recursive: true })
 await new Promise(resolve => as.listen(0, '127.0.0.1', resolve))
 base = `http://127.0.0.1:${as.address().port}`
 await new Promise(resolve => plugin.listen(0, '127.0.0.1', resolve))
-const endpoint = `http://127.0.0.1:${plugin.address().port}/api/qurwork-market/oauth`
+const endpoint = `http://127.0.0.1:${plugin.address().port}/api/yuze-market/oauth`
 
 const get = async path => {
   const response = await fetch(`${endpoint}${path}`)

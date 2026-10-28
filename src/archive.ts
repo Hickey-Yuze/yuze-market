@@ -89,7 +89,7 @@ export async function downloadArchive(url: string, timeoutMs = 120_000): Promise
 
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
-  const directory = await mkdtemp(join(tmpdir(), 'qurwork-market-'))
+  const directory = await mkdtemp(join(tmpdir(), 'yuze-market-'))
   const target = join(directory, 'download.archive')
   try {
     const response = await fetch(parsed.href, {

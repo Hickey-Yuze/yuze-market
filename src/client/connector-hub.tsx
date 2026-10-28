@@ -83,7 +83,7 @@ function emit(): void {
 
 async function readStatus(server: string): Promise<AuthState | null> {
   try {
-    const response = await fetch(`/api/qurwork-market/oauth/status?server=${encodeURIComponent(server)}`)
+    const response = await fetch(`/api/yuze-market/oauth/status?server=${encodeURIComponent(server)}`)
     if (!response.ok) return null
     return (await response.json()) as AuthState
   } catch {

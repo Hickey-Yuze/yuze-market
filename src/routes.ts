@@ -1,7 +1,7 @@
 /**
  * HTTP routes exposed by the Node half.
  *
- * Every route lives under `/api/qurwork-market/`. The Client half talks to the
+ * Every route lives under `/api/yuze-market/`. The Client half talks to the
  * Host over these routes only; the renderer never reaches the market backend
  * directly, so all validation, size limits and install side effects stay on
  * the Host side.
@@ -18,7 +18,7 @@ import { installPlugin, listInstalledPlugins, type PnpmRunner } from './plugin-i
 import { installSkill, listInstalledSkills } from './skill-install.js'
 import type { ApiError, InstallResult } from './shared/types.js'
 
-const ROUTE_PREFIX = '/api/qurwork-market'
+const ROUTE_PREFIX = '/api/yuze-market'
 const MAX_BODY_BYTES = 16 * 1024
 
 /**

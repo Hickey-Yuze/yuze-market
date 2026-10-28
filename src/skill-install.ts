@@ -210,7 +210,7 @@ export async function installSkill(options: SkillInstallOptions): Promise<SkillI
   const { entry, skillRoot } = options
   const warnings: string[] = []
   const download = await downloadArchive(entry.url)
-  const staging = await mkdtemp(join(tmpdir(), 'qurwork-skill-'))
+  const staging = await mkdtemp(join(tmpdir(), 'yuze-skill-'))
   try {
     await extractZip(download.path, staging)
     const candidates = await collectSkillCandidates(staging)

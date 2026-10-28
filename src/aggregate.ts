@@ -72,7 +72,7 @@ export interface UnifiedList {
   readonly expertSnapshotMissing?: boolean
 }
 
-export const ART_ROUTE = '/api/qurwork-market/art'
+export const ART_ROUTE = '/api/yuze-market/art'
 
 export function artUrlFor(id: string): string {
   return `${ART_ROUTE}?id=${encodeURIComponent(id)}`

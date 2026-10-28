@@ -44,9 +44,9 @@ function MarketPanelIcon(props: { size?: number }): JSX.Element {
 }
 
 export function apply(ctx: Context): void {
-  if (typeof document !== 'undefined' && !document.querySelector('style[data-qurwork-market]')) {
+  if (typeof document !== 'undefined' && !document.querySelector('style[data-yuze-market]')) {
     const element = document.createElement('style')
-    element.dataset.qurworkMarket = ''
+    element.dataset.yuzeMarket = ''
     element.textContent = styles
     document.head.appendChild(element)
   }
@@ -54,10 +54,10 @@ export function apply(ctx: Context): void {
   ctx.effect(() => {
     ctx.locale.register(NS, { zh, en })
     return () => {}
-  }, 'qurwork-market: dictionaries')
+  }, 'yuze-market: dictionaries')
 
   // Show the MCP side inside the shared 连接器 panel when one is mounted.
-  ctx.effect(() => registerYuzeMcpConnector(), 'qurwork-market: connector row')
+  ctx.effect(() => registerYuzeMcpConnector(), 'yuze-market: connector row')
 
   const t = ctx.locale.bind(NS)
   const onPickDirectory = createDirectoryPicker(ctx)

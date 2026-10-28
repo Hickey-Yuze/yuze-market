@@ -1,6 +1,6 @@
 {
   "name": "yuze-market",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Yuze-市场：技能、专家、连接器与插件的一体化市场（DSH 插件）",
   "type": "module",
   "main": "lib/index.js",
