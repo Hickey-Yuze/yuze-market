@@ -93,7 +93,7 @@ export async function installPlugin(options: PluginInstallOptions): Promise<Plug
   const { entry, profileDir, pnpm } = options
   const warnings: string[] = []
   const download = await downloadArchive(entry.downloadUrl)
-  const staging = await mkdtemp(join(tmpdir(), 'qurwork-plugin-'))
+  const staging = await mkdtemp(join(tmpdir(), 'yuze-plugin-'))
   try {
     await extractZip(download.path, staging)
     const packageRoot = await resolvePackageRoot(staging)

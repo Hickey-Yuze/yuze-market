@@ -49,7 +49,7 @@ async function discover(mcpUrl) {
       params: {
         protocolVersion: '2024-11-05',
         capabilities: {},
-        clientInfo: { name: 'qurwork-market', version: '0.1.0' },
+        clientInfo: { name: 'yuze-market', version: '0.1.0' },
       },
     }),
   })
@@ -135,7 +135,7 @@ async function initialize(mcpUrl, token) {
       params: {
         protocolVersion: '2024-11-05',
         capabilities: {},
-        clientInfo: { name: 'qurwork-market', version: '0.1.0' },
+        clientInfo: { name: 'yuze-market', version: '0.1.0' },
       },
     }),
   })

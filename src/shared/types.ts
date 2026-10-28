@@ -1,7 +1,7 @@
 /**
  * Shared wire types between the Node half (market client, installers) and the
  * Client half (panels). Kept in one place so both builds agree on the shape of
- * every `/api/qurwork-market/*` response.
+ * every `/api/yuze-market/*` response.
  */
 
 /** One market category as published by the QuWork backend. */

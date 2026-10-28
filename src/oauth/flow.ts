@@ -68,7 +68,7 @@ function initializeBody(): string {
     params: {
       protocolVersion: MCP_PROTOCOL_VERSION,
       capabilities: {},
-      clientInfo: { name: 'qurwork-market', version: '0.1.0' },
+      clientInfo: { name: 'yuze-market', version: '0.1.0' },
     },
   })
 }

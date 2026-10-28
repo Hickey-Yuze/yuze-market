@@ -3,7 +3,7 @@
  *
  * Mounts two route families on the host web server:
  *
- * - `/api/qurwork-market/*` — the QuWork skill directory and DSH plugin market
+ * - `/api/yuze-market/*` — the QuWork skill directory and DSH plugin market
  *   (remote backend, installs into the DSH skill root / profile package.json).
  * - `/api/workbuddy-market/*` — the WorkBuddy expert, skill and connector
  *   catalogue (local JSON cache, connectors install as `dsh-mcp-client`
@@ -28,7 +28,7 @@ import { ensureBundledAssets } from './bootstrap-assets.js'
 import { mountUnifiedRoutes } from './unified-routes.js'
 import { findConnectorUrl, setConnectorHeaders } from './wb/mcp-install.js'
 
-export const name = 'qurwork-market'
+export const name = 'yuze-market'
 
 /** Host services this plugin consumes. */
 export const inject = ['webServer']
@@ -68,7 +68,7 @@ export function apply(ctx: Context, config: QurworkMarketConfig = {}): void {
   ctx.inject(['webServer'], (hostCtx) => {
     const dshHome = resolveDshHome(config.dshHome)
     const skillRoot = join(dshHome, 'skills')
-    const receiptDir = join(dshHome, 'qurwork-market')
+    const receiptDir = join(dshHome, 'yuze-market')
 
     const mount = (): (() => void) => {
       const pnpm = hostCtx.get('desktopPnpm')

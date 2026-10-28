@@ -12,7 +12,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-const OAUTH = '/api/qurwork-market/oauth'
+const OAUTH = '/api/yuze-market/oauth'
 
 /** 2s × 150 = 5 minutes, matching the loopback listener's own timeout. */
 const POLL_INTERVAL_MS = 2000
