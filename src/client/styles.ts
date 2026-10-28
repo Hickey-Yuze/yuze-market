@@ -476,6 +476,15 @@ export const styles = `
   line-height: 1.5;
 }
 .qym-note[data-tone='error'] { background: var(--qym-danger-bg); color: var(--qym-danger); }
+.qym-note[data-snapshot-hint] {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  background: var(--qym-primary-50);
+  color: var(--qym-primary-700);
+}
 .qym-note[data-tone='ok'] { background: var(--qym-success-bg); color: var(--qym-success); }
 .qym-hint { margin: 0; font-size: 12px; color: var(--qym-text-3); line-height: 1.5; }
 .qym-more { display: flex; justify-content: center; padding-top: 20px; }

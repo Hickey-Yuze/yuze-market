@@ -47,6 +47,8 @@ export interface UnifiedList {
   readonly pageSize: number
   readonly hasMore: boolean
   readonly degraded?: boolean
+  /** True when the expert tab is showing only the bundled 429-row catalogue. */
+  readonly expertSnapshotMissing?: boolean
 }
 
 export interface InstalledSkillEntry {
@@ -178,6 +180,11 @@ export const marketApi = {
 
   removePlugin(packageName: string): Promise<MutationResult> {
     return request('/plugin', { method: 'POST', body: JSON.stringify({ packageName, remove: true }) })
+  },
+
+  /** Pull the published expert catalogue (~20 MB) into the local cache. */
+  fetchExpertSnapshot(): Promise<{ ok: boolean; total?: number; message?: string }> {
+    return request('/snapshot/experts', { method: 'POST' })
   },
 
   manual(payload: Record<string, unknown>): Promise<MutationResult> {

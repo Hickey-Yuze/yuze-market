@@ -24,6 +24,7 @@ import { MarketCatalog, defaultCatalogPath } from './wb/catalog.js'
 import { mountMarketRoutes as mountWorkBuddyRoutes } from './wb/routes.js'
 import { Aggregator } from './aggregate.js'
 import { mountOAuthRoutes } from './oauth/routes.js'
+import { ensureBundledAssets } from './bootstrap-assets.js'
 import { mountUnifiedRoutes } from './unified-routes.js'
 import { findConnectorUrl, setConnectorHeaders } from './wb/mcp-install.js'
 
@@ -113,6 +114,12 @@ export function apply(ctx: Context, config: QurworkMarketConfig = {}): void {
         callbackPort: 17321,
         updateHeaders: (serverName, headers) => setConnectorHeaders(serverName, headers, { profilePath, backupDir }),
         readUrl: serverName => findConnectorUrl(serverName, { profilePath, backupDir }),
+      })
+
+      // Unpack any catalogue that ships inside the package, so a fresh install
+      // on another machine has skills without running a sync script first.
+      void ensureBundledAssets(join(dshHome, 'workbuddy-market', 'cache')).then(names => {
+        if (names.length > 0) ctx.logger?.info?.(`[yuze-market] 已解压内置资源：${names.join(', ')}`)
       })
 
       // The panel's own API: four tabs, one item shape, one install entry point.
