@@ -14,3 +14,6 @@ scratch/
 # tooling
 .DS_Store
 *.log
+
+# published release assets (built by scripts/build-expert-asset.mjs)
+experts-market.json.gz
