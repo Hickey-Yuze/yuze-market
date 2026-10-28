@@ -24,7 +24,7 @@ import { MarketApiClient } from '../scratch/server-out/market-api.js'
 import { MarketCatalog } from '../scratch/server-out/wb/catalog.js'
 import { mountUnifiedRoutes } from '../scratch/server-out/unified-routes.js'
 import { writeZip } from './lib/minizip.mjs'
-import { downloadExpertSnapshot } from '../scratch/server-out/snapshot.js'
+import { downloadExpertSnapshot, expertSnapshotProgress } from '../scratch/server-out/snapshot.js'
 import { gzipSync } from 'node:zlib'
 
 const HOME = join(process.cwd(), 'scratch', 'api-home')
@@ -640,6 +640,7 @@ try {
     const ok = await downloadExpertSnapshot(target, url)
     source.close()
     check('下载并解压成功', ok.ok === true && ok.total === 2, JSON.stringify(ok))
+    check('进度状态为 done', expertSnapshotProgress().state === 'done', JSON.stringify(expertSnapshotProgress()))
     const written = JSON.parse(await readFile(join(target, 'experts-market.json'), 'utf8'))
     check('落盘内容完整', written.items.length === 2, written.items?.length)
 
@@ -651,6 +652,8 @@ try {
     const bad = await downloadExpertSnapshot(target, `http://127.0.0.1:${badSource.address().port}/x.gz`)
     badSource.close()
     check('坏 gzip 明确报错', bad.ok === false && /gzip/u.test(bad.message ?? ''), JSON.stringify(bad))
+    check('失败后进度标记 error', expertSnapshotProgress().state === 'error', JSON.stringify(expertSnapshotProgress()))
+
   }
 
   console.log('\n11. 跨站写请求被拒绝')

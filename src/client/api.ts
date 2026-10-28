@@ -182,9 +182,19 @@ export const marketApi = {
     return request('/plugin', { method: 'POST', body: JSON.stringify({ packageName, remove: true }) })
   },
 
-  /** Pull the published expert catalogue (~20 MB) into the local cache. */
-  fetchExpertSnapshot(): Promise<{ ok: boolean; total?: number; message?: string }> {
+  /** Start pulling the published expert catalogue into the local cache. */
+  fetchExpertSnapshot(): Promise<{ started: boolean; alreadyRunning?: boolean }> {
     return request('/snapshot/experts', { method: 'POST' })
+  },
+
+  /** Byte progress of that background download. */
+  expertSnapshotProgress(): Promise<{
+    state: 'idle' | 'running' | 'done' | 'error'
+    received: number
+    total: number
+    message?: string
+  }> {
+    return request('/snapshot/experts/progress')
   },
 
   manual(payload: Record<string, unknown>): Promise<MutationResult> {

@@ -31,7 +31,7 @@ import {
 } from './manual.js'
 import { listManaged, removeManaged, setManagedEnabled, listTrash } from './managed.js'
 import { installMarketExpert } from './market-expert-install.js'
-import { downloadExpertSnapshot } from './snapshot.js'
+import { downloadExpertSnapshot, expertSnapshotProgress, isSnapshotRunning } from './snapshot.js'
 import type { MarketApiClient } from './market-api.js'
 import type { PnpmRunner } from './plugin-install.js'
 import { installPlugin } from './plugin-install.js'
@@ -264,8 +264,19 @@ export function mountUnifiedRoutes(register: (route: Route) => () => void, deps:
       }
 
       if (tail === 'snapshot/experts' && method === 'POST') {
-        const outcome = await downloadExpertSnapshot(deps.cacheRoot)
-        sendJson(response, outcome.ok ? 200 : 502, outcome)
+        // Runs in the background: the transfer can take minutes on a slow link,
+        // and holding the HTTP response open would time out on the way.
+        if (isSnapshotRunning()) {
+          sendJson(response, 202, { started: true, alreadyRunning: true })
+          return
+        }
+        void downloadExpertSnapshot(deps.cacheRoot).catch(() => undefined)
+        sendJson(response, 202, { started: true })
+        return
+      }
+
+      if (tail === 'snapshot/experts/progress' && method === 'GET') {
+        sendJson(response, 200, expertSnapshotProgress())
         return
       }
 
