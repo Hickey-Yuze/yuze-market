@@ -323,13 +323,33 @@ export function MarketPanel(props: MarketPanelProps): JSX.Element {
     setFetchingSnapshot(true)
     setSnapshotNotice(undefined)
     try {
-      const result = await marketApi.fetchExpertSnapshot()
-      if (!result.ok) {
-        setSnapshotNotice(result.message ?? '获取失败')
-        return
+      await marketApi.fetchExpertSnapshot()
+      // The transfer runs on the Host; poll it so the button can show bytes
+      // instead of freezing for however long the download takes.
+      for (let attempt = 0; attempt < 900; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        if (!alive.current) return
+        const progress = await marketApi.expertSnapshotProgress()
+        const mb = (bytes: number): string => (bytes / 1024 / 1024).toFixed(1)
+        if (progress.state === 'running') {
+          setSnapshotNotice(
+            progress.total > 0
+              ? `下载中 ${mb(progress.received)} / ${mb(progress.total)} MB`
+              : `下载中 ${mb(progress.received)} MB`,
+          )
+          continue
+        }
+        if (progress.state === 'error') {
+          setSnapshotNotice(progress.message ?? '获取失败')
+          return
+        }
+        if (progress.state === 'done') {
+          setSnapshotNotice(progress.message ?? '已获取完整目录')
+          await load(1, false)
+          return
+        }
       }
-      setSnapshotNotice(`已获取 ${(result.total ?? 0).toLocaleString('zh-CN')} 位专家`)
-      await load(1, false)
+      setSnapshotNotice('下载超时，请稍后重试')
     } catch (cause) {
       setSnapshotNotice(cause instanceof Error ? cause.message : String(cause))
     } finally {
@@ -462,7 +482,7 @@ export function MarketPanel(props: MarketPanelProps): JSX.Element {
               disabled={fetchingSnapshot}
               onClick={() => void fetchSnapshot()}
             >
-              {fetchingSnapshot ? '获取中…' : '获取完整目录'}
+              {fetchingSnapshot ? '下载中…' : '获取完整目录'}
             </button>
           </div>
         ) : null}
