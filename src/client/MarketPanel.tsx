@@ -78,6 +78,8 @@ export function MarketPanel(props: MarketPanelProps): JSX.Element {
   const [openId, setOpenId] = useState<string | undefined>(undefined)
   const [manualOpen, setManualOpen] = useState(false)
   const [showInstalled, setShowInstalled] = useState(false)
+  const [fetchingSnapshot, setFetchingSnapshot] = useState(false)
+  const [snapshotNotice, setSnapshotNotice] = useState<string | undefined>(undefined)
   const alive = useRef(true)
   const searchRef = useRef<HTMLInputElement | null>(null)
 
@@ -317,6 +319,24 @@ export function MarketPanel(props: MarketPanelProps): JSX.Element {
     [afterMutation],
   )
 
+  const fetchSnapshot = useCallback(async (): Promise<void> => {
+    setFetchingSnapshot(true)
+    setSnapshotNotice(undefined)
+    try {
+      const result = await marketApi.fetchExpertSnapshot()
+      if (!result.ok) {
+        setSnapshotNotice(result.message ?? '获取失败')
+        return
+      }
+      setSnapshotNotice(`已获取 ${(result.total ?? 0).toLocaleString('zh-CN')} 位专家`)
+      await load(1, false)
+    } catch (cause) {
+      setSnapshotNotice(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setFetchingSnapshot(false)
+    }
+  }, [load])
+
   const detailEntry = openItem === undefined ? undefined : installedFor(openItem)
 
   return (
@@ -428,6 +448,28 @@ export function MarketPanel(props: MarketPanelProps): JSX.Element {
         {notice !== undefined ? (
           <p className="qym-note" data-tone={notice.startsWith('已') ? 'ok' : 'error'}>
             {notice}
+          </p>
+        ) : null}
+
+        {!showInstalled && tab === 'expert' && list?.expertSnapshotMissing === true ? (
+          <div className="qym-note" data-snapshot-hint="">
+            <span>
+              当前只有内置的 {list.total} 位专家。完整目录约 27 000 位、压缩后 20 MB，下载后即可离线浏览（安装云端专家仍需本机同步）。
+            </span>
+            <button
+              type="button"
+              className="qym-btn qym-btn--primary"
+              disabled={fetchingSnapshot}
+              onClick={() => void fetchSnapshot()}
+            >
+              {fetchingSnapshot ? '获取中…' : '获取完整目录'}
+            </button>
+          </div>
+        ) : null}
+
+        {snapshotNotice !== undefined ? (
+          <p className="qym-note" data-tone={snapshotNotice.startsWith('已') ? 'ok' : 'error'}>
+            {snapshotNotice}
           </p>
         ) : null}
 

@@ -68,6 +68,8 @@ export interface UnifiedList {
   readonly hasMore: boolean
   /** True while a remote half of the list is unavailable (offline, 5xx). */
   readonly degraded?: boolean
+  /** True when the expert tab fell back to the bundled 429-row catalogue. */
+  readonly expertSnapshotMissing?: boolean
 }
 
 export const ART_ROUTE = '/api/qurwork-market/art'
@@ -565,6 +567,7 @@ export class Aggregator {
     const pageSize = Math.min(200, Math.max(1, input.pageSize ?? 60))
     let all: readonly UnifiedItem[]
     let degraded = false
+    let expertSnapshotMissing = false
 
     switch (input.tab) {
       case 'skill': {
@@ -595,6 +598,7 @@ export class Aggregator {
         ])
         if (cloud.length === 0) {
           all = bundle
+          expertSnapshotMissing = true
           break
         }
         // The cloud list is the superset; keep the bundled rows only when the
@@ -641,6 +645,7 @@ export class Aggregator {
       pageSize,
       hasMore: start + pageSize < filtered.length,
       ...(degraded ? { degraded: true } : {}),
+      ...(expertSnapshotMissing ? { expertSnapshotMissing: true } : {}),
     }
   }
 

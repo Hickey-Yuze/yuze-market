@@ -31,6 +31,7 @@ import {
 } from './manual.js'
 import { listManaged, removeManaged, setManagedEnabled, listTrash } from './managed.js'
 import { installMarketExpert } from './market-expert-install.js'
+import { downloadExpertSnapshot } from './snapshot.js'
 import type { MarketApiClient } from './market-api.js'
 import type { PnpmRunner } from './plugin-install.js'
 import { installPlugin } from './plugin-install.js'
@@ -259,6 +260,12 @@ export function mountUnifiedRoutes(register: (route: Route) => () => void, deps:
             ? await uninstallPlugin(options, packageName)
             : await setPluginEnabled(options, packageName, body?.enabled !== false)
         sendJson(response, outcome.ok ? 200 : 409, outcome)
+        return
+      }
+
+      if (tail === 'snapshot/experts' && method === 'POST') {
+        const outcome = await downloadExpertSnapshot(deps.cacheRoot)
+        sendJson(response, outcome.ok ? 200 : 502, outcome)
         return
       }
 

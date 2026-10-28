@@ -24,6 +24,8 @@ import { MarketApiClient } from '../scratch/server-out/market-api.js'
 import { MarketCatalog } from '../scratch/server-out/wb/catalog.js'
 import { mountUnifiedRoutes } from '../scratch/server-out/unified-routes.js'
 import { writeZip } from './lib/minizip.mjs'
+import { downloadExpertSnapshot } from '../scratch/server-out/snapshot.js'
+import { gzipSync } from 'node:zlib'
 
 const HOME = join(process.cwd(), 'scratch', 'api-home')
 const SKILL_ROOT = join(HOME, 'skills')
@@ -607,6 +609,48 @@ try {
       SKILL_ROOT,
     )
     check('过期地址明确拒绝', expired.result.ok === false && expired.result.code === 'download-expired', JSON.stringify(expired.result))
+  }
+
+  console.log('\n10b. 专家快照：缺失标记与按需下载')
+  {
+    // 不传快照 → 回退内置目录并打标记
+    const bare = new Aggregator({ catalog, market: api })
+    const missing = await bare.list({ tab: 'expert', pageSize: 5 })
+    check('无快照时标记 expertSnapshotMissing', missing.expertSnapshotMissing === true, JSON.stringify(missing).slice(0, 120))
+    check('回退到内置目录', missing.total > 0, missing.total)
+
+    // 用本地 gzip 源替换发布地址
+    const payload = {
+      builtAt: new Date().toISOString(),
+      total: 2,
+      items: [
+        { expert_id: 'dl-1', agent_name: 'dl-one', profession_zh: '下载专家一', description_zh: '来自快照', use_count: 5 },
+        { expert_id: 'dl-2', agent_name: 'dl-two', profession_zh: '下载专家二', description_zh: '来自快照', use_count: 3 },
+      ],
+    }
+    const gz = gzipSync(Buffer.from(JSON.stringify(payload), 'utf8'))
+    const source = createServer((request, response) => {
+      response.setHeader('content-type', 'application/gzip')
+      response.end(gz)
+    })
+    await new Promise(resolve => source.listen(0, '127.0.0.1', resolve))
+    const url = `http://127.0.0.1:${source.address().port}/experts.json.gz`
+
+    const target = join(HOME, 'snapshot-cache')
+    const ok = await downloadExpertSnapshot(target, url)
+    source.close()
+    check('下载并解压成功', ok.ok === true && ok.total === 2, JSON.stringify(ok))
+    const written = JSON.parse(await readFile(join(target, 'experts-market.json'), 'utf8'))
+    check('落盘内容完整', written.items.length === 2, written.items?.length)
+
+    const badSource = createServer((request, response) => {
+      response.setHeader('content-type', 'application/gzip')
+      response.end(Buffer.from('not gzip'))
+    })
+    await new Promise(resolve => badSource.listen(0, '127.0.0.1', resolve))
+    const bad = await downloadExpertSnapshot(target, `http://127.0.0.1:${badSource.address().port}/x.gz`)
+    badSource.close()
+    check('坏 gzip 明确报错', bad.ok === false && /gzip/u.test(bad.message ?? ''), JSON.stringify(bad))
   }
 
   console.log('\n11. 跨站写请求被拒绝')
