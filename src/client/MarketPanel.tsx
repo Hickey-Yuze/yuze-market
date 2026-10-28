@@ -79,6 +79,8 @@ export function MarketPanel(props: MarketPanelProps): JSX.Element {
   const [manualOpen, setManualOpen] = useState(false)
   const [showInstalled, setShowInstalled] = useState(false)
   const [fetchingSnapshot, setFetchingSnapshot] = useState(false)
+  /** Expert whose stale signature needs a WorkBuddy relaunch before installing. */
+  const [restartFor, setRestartFor] = useState<UnifiedItem | undefined>(undefined)
   const [snapshotNotice, setSnapshotNotice] = useState<string | undefined>(undefined)
   const alive = useRef(true)
   const searchRef = useRef<HTMLInputElement | null>(null)
@@ -195,15 +197,23 @@ export function MarketPanel(props: MarketPanelProps): JSX.Element {
   )
 
   const install = useCallback(
-    async (item: UnifiedItem): Promise<void> => {
+    async (item: UnifiedItem, allowRestart = false): Promise<void> => {
       setBusyId(item.id)
       setNotice(undefined)
       try {
-        const result = await marketApi.install(item.id)
+        const result = await marketApi.install(item.id, { allowRestart })
         if (!result.ok) {
+          // The signature in the snapshot expired; getting a fresh one means
+          // relaunching WorkBuddy, which the user has to agree to first.
+          if (result.code === 'need-restart') {
+            setRestartFor(item)
+            setNotice(result.message ?? '需要重启 WorkBuddy 才能获取新的下载地址')
+            return
+          }
           setNotice(result.message ?? '安装失败')
           return
         }
+        setRestartFor(undefined)
         await afterMutation(
           item.tab === 'connector' || item.tab === 'plugin' ? '已安装，重启 Harness 后生效' : '安装完成',
         )
@@ -484,6 +494,31 @@ export function MarketPanel(props: MarketPanelProps): JSX.Element {
             >
               {fetchingSnapshot ? '下载中…' : '获取完整目录'}
             </button>
+          </div>
+        ) : null}
+
+        {restartFor !== undefined ? (
+          <div className="qym-note" data-snapshot-hint="">
+            <span>
+              该专家的下载地址已过期（签名 24 小时）。重启 WorkBuddy 打开调试端口即可现取一个（约 1 分钟，未保存的内容请先保存）。
+            </span>
+            <span className="qym-actions">
+              <button type="button" className="qym-btn" onClick={() => setRestartFor(undefined)}>
+                取消
+              </button>
+              <button
+                type="button"
+                className="qym-btn qym-btn--primary"
+                disabled={busyId !== undefined}
+                onClick={() => {
+                  const item = restartFor
+                  setRestartFor(undefined)
+                  void install(item, true)
+                }}
+              >
+                {busyId !== undefined ? '处理中…' : '重启并安装'}
+              </button>
+            </span>
           </div>
         ) : null}
 

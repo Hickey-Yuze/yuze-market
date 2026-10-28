@@ -32,6 +32,7 @@ import {
 import { listManaged, removeManaged, setManagedEnabled, listTrash } from './managed.js'
 import { installMarketExpert } from './market-expert-install.js'
 import { downloadExpertSnapshot, expertSnapshotProgress, isSnapshotRunning } from './snapshot.js'
+import { fetchLiveExpertUrl } from './wb/live-url.js'
 import type { MarketApiClient } from './market-api.js'
 import type { PnpmRunner } from './plugin-install.js'
 import { installPlugin } from './plugin-install.js'
@@ -309,7 +310,12 @@ export function mountUnifiedRoutes(register: (route: Route) => () => void, deps:
 
 // ------------------------------------------------------------------ install
 
-async function installById(id: string, deps: UnifiedDeps, installDeps: InstallDeps): Promise<unknown> {
+async function installById(
+  id: string,
+  deps: UnifiedDeps,
+  installDeps: InstallDeps,
+  options: { readonly allowRestart?: boolean } = {},
+): Promise<unknown> {
   // `skillfile:<name>` — a skill that ships inside a local WorkBuddy marketplace
   // package; installing it copies the directory instead of downloading a zip.
   if (id.startsWith('skillfile:')) {
@@ -328,15 +334,34 @@ async function installById(id: string, deps: UnifiedDeps, installDeps: InstallDe
   if (id.startsWith('market:expert:')) {
     const expertId = id.slice('market:expert:'.length)
     const raw = await deps.aggregator.rawMarketExpert(expertId)
-    if (raw === undefined || typeof raw.download_url !== 'string') {
-      return {
-        ok: false,
-        kind: 'skill',
-        target: id,
-        code: 'no-download',
-        message: '该专家没有可用的下载地址，请先运行 sync:experts 同步',
-      }
+    if (raw === undefined) {
+      return { ok: false, kind: 'skill', target: id, code: 'no-download', message: '快照里没有这位专家' }
     }
+
+    // A signature from the snapshot expires in ~24h. Rather than telling the
+    // user to re-run a 10-minute sync, ask the local WorkBuddy for a fresh one.
+    let downloadUrl: string | undefined = raw.download_url
+    let expiresAt: number | null = typeof raw.download_expires_at === 'number' ? raw.download_expires_at : null
+    const stale = typeof downloadUrl !== 'string' || (expiresAt !== null && expiresAt < Date.now())
+
+    if (stale) {
+      const live = await fetchLiveExpertUrl(expertId, { allowRestart: options.allowRestart === true })
+      if (live.ok !== true || live.url === undefined) {
+        return {
+          ok: false,
+          kind: 'skill',
+          target: id,
+          code: live.needRestart === true ? 'need-restart' : 'no-download',
+          message: live.message ?? '无法获取签名下载地址',
+        }
+      }
+      downloadUrl = live.url
+      expiresAt = live.expiresAt ?? null
+    }
+    if (downloadUrl === undefined) {
+      return { ok: false, kind: 'skill', target: id, code: 'no-download', message: '没有可用的下载地址' }
+    }
+
     const outcome = await installMarketExpert(
       {
         expertId,
@@ -345,8 +370,8 @@ async function installById(id: string, deps: UnifiedDeps, installDeps: InstallDe
         description: raw.description_zh ?? '',
         profession: raw.profession_zh ?? '',
         ...(raw.version === undefined ? {} : { version: raw.version }),
-        downloadUrl: raw.download_url,
-        expiresAt: typeof raw.download_expires_at === 'number' ? raw.download_expires_at : null,
+        downloadUrl,
+        expiresAt,
       },
       deps.skillRoot,
     )

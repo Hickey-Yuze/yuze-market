@@ -154,8 +154,14 @@ export const marketApi = {
     return request<InstalledPayload>('/installed')
   },
 
-  install(id: string): Promise<MutationResult & { target?: string; kind?: string }> {
-    return request('/install', { method: 'POST', body: JSON.stringify({ id }) })
+  install(
+    id: string,
+    options: { readonly allowRestart?: boolean } = {},
+  ): Promise<MutationResult & { target?: string; kind?: string }> {
+    return request('/install', {
+      method: 'POST',
+      body: JSON.stringify({ id, ...(options.allowRestart === true ? { allowRestart: true } : {}) }),
+    })
   },
 
   setSkillEnabled(name: string, enabled: boolean): Promise<MutationResult> {
