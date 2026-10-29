@@ -170,7 +170,12 @@ export async function installMarketExpert(
     }
 
     const { head, body } = splitFrontmatter(await readFile(join(unpacked, agentFile), 'utf8'))
-    const name = slug(meta?.agentName ?? source.agentName ?? head.name ?? source.expertId)
+    // The marketplace row's agent name is what the user clicked, so it wins.
+    // The zip's plugin.json `agentName` is the pack author's internal name and
+    // can differ from the catalogue entry (e.g. "data-analysis-expert" ships a
+    // "data-team-lead" package); letting it override would install a skill the
+    // user never asked for and make the click look broken.
+    const name = slug(source.agentName ?? meta?.agentName ?? head.name ?? source.expertId)
     // The catalogue's Chinese blurb reads better to the model than the package's
     // English one-liner, which stays as the fallback for hand-made zips.
     const description =
