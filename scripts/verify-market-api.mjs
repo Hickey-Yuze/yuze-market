@@ -564,7 +564,23 @@ try {
         name: '.codebuddy-plugin/plugin.json',
         data: JSON.stringify({ agentName: 'cloud-install-test', agents: ['./agents/test.md'], version: '9.9.9' }),
       },
-      { name: 'agents/test.md', data: '---\nname: whatever\ndescription: 来自云端包的专家\n---\n\n你是测试专家。\n' },
+      {
+        name: 'agents/test.md',
+        data: [
+          '---',
+          'name: whatever',
+          'description: 来自云端包的专家',
+          '---',
+          '',
+          '你是测试专家。详见 `skills/helper/SKILL.md`，封面见 ![图](assets/cover.png)。',
+          '另有一个正文未提及的孤儿文件。',
+          '',
+        ].join('\n'),
+      },
+      { name: 'skills/helper/SKILL.md', data: '---\nname: helper\ndescription: 附加技能\n---\n\n辅助内容\n' },
+      { name: 'skills/helper/notes.md', data: '辅助备注\n' },
+      { name: 'assets/cover.png', data: Buffer.from([0x89, 0x50, 0x4e, 0x47]) },
+      { name: 'assets/orphan.txt', data: '不该被带走\n' },
     ])
 
     const fileServer = createServer((request, response) => {
@@ -595,6 +611,13 @@ try {
     check('frontmatter 名字规范', /name: cloud-install-test/u.test(content), content.slice(0, 120))
     check('保留了正文', content.includes('你是测试专家'), content.slice(0, 200))
     check('正文里没有重复 frontmatter', (content.match(/^---$/gm) ?? []).length === 2, content.slice(0, 200))
+
+    const exists = async p => stat(p).then(() => true, () => false)
+    check('引用的文件被一并复制', await exists(join(SKILL_ROOT, 'cloud-install-test', 'skills', 'helper', 'SKILL.md')))
+    check('目录引用整体展开', await exists(join(SKILL_ROOT, 'cloud-install-test', 'skills', 'helper', 'notes.md')))
+    check('引用的图片被复制', await exists(join(SKILL_ROOT, 'cloud-install-test', 'assets', 'cover.png')))
+    check('未被引用的文件不复制', !(await exists(join(SKILL_ROOT, 'cloud-install-test', 'assets', 'orphan.txt'))))
+    check('复制结果写进 warnings', (ok.result.warnings ?? []).some(w => /引用文件/u.test(w)), JSON.stringify(ok.result.warnings))
 
     const expired = await installMarketExpert(
       {
