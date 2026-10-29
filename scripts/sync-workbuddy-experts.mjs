@@ -28,7 +28,7 @@
  */
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:http'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
@@ -37,6 +37,10 @@ const DSH_HOME = process.env.DSH_HOME ?? join(homedir(), '.dsh')
 const OUT = join(DSH_HOME, 'workbuddy-market', 'cache', 'experts-market.json')
 const PAGE_SIZE = 100
 const WITH_DOWNLOAD = !process.argv.includes('--no-download')
+/** Resume from a page, so a mid-run upstream failure does not lose the earlier pages. */
+const FROM_PAGE = Math.max(1, Number(process.env.FROM_PAGE ?? '1') || 1)
+/** Merge into the existing snapshot instead of replacing it. */
+const MERGE = process.argv.includes('--merge')
 const DOWNLOAD_CONCURRENCY = 8
 const ENDPOINT = '/portal/operation-platform/market/expert/list'
 
@@ -195,7 +199,8 @@ const script = `(async () => {
     if (response && response.code !== 0) throw new Error('code=' + response.code)
     return response
   }
-  const first = await post({ page: 1, page_size: ${PAGE_SIZE}, sort_by: 'reco_rank', sort_order: 'desc' })
+  const FROM_PAGE = ${FROM_PAGE}
+  const first = await post({ page: FROM_PAGE, page_size: ${PAGE_SIZE}, sort_by: 'reco_rank', sort_order: 'desc' })
   const total = first?.data?.total_count ?? first?.data?.total ?? 0
   const send = async (items, pageNo) => {
     await fetch('http://127.0.0.1:${sinkPort}/chunk', {
@@ -245,11 +250,11 @@ const script = `(async () => {
   }
   let pages = 0
   let collected = (first?.data?.experts ?? []).length
-  await send(first?.data?.experts ?? [], 1)
+  await send(first?.data?.experts ?? [], FROM_PAGE)
   await sendUrls(await grabUrls(first?.data?.experts ?? []))
-  pages = 1
+  pages = FROM_PAGE
   const lastPage = Math.ceil(total / ${PAGE_SIZE})
-  for (let pageNo = 2; pageNo <= lastPage; pageNo++) {
+  for (let pageNo = FROM_PAGE + 1; pageNo <= lastPage; pageNo++) {
     let attempt = 0
     for (;;) {
       try {
@@ -295,6 +300,18 @@ log(`渲染进程报告：total=${summary.total} pages=${summary.pages} collecte
 if (summary.error !== undefined) log(`中途失败：page ${summary.failedAt} — ${summary.error}`)
 
 const deduped = new Map()
+if (MERGE) {
+  try {
+    const previous = JSON.parse(await readFile(OUT, 'utf8'))
+    for (const item of previous.items ?? []) {
+      const id = item?.expert_id ?? item?.source_id
+      if (typeof id === 'string' && id.length > 0) deduped.set(id, item)
+    }
+    log(`合并既有快照：${deduped.size} 条`)
+  } catch {
+    log('没有可合并的既有快照，按新抓取写入')
+  }
+}
 for (const item of sink.experts) {
   const id = item?.expert_id ?? item?.source_id
   if (typeof id === 'string' && id.length > 0) deduped.set(id, item)
