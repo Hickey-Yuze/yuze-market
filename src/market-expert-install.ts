@@ -19,7 +19,7 @@
 
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 
 import { extractZip } from './archive.js'
 import { writeManualMarker } from './managed.js'
@@ -195,9 +195,15 @@ export async function installMarketExpert(
     await mkdir(target, { recursive: true })
     await writeFile(join(target, 'SKILL.md'), `${frontmatter}${body.trim()}\n`, 'utf8')
 
+    // Bring along whatever the body points at, so links inside the prompt resolve.
+    const copied = await copyReferences(body, unpacked, target, warnings)
+    if (copied > 0) {
+      warnings.push(`已一并复制 ${copied} 个引用文件`)
+    }
+
     const bundledSkills = listing.filter(path => /^skills\/[^/]+\/SKILL\.md$/u.test(path)).length
-    if (bundledSkills > 0) {
-      warnings.push(`该专家包还带有 ${bundledSkills} 个技能，未一并安装（专家本体已装为技能）`)
+    if (bundledSkills > 0 && copied === 0) {
+      warnings.push(`该专家包还带有 ${bundledSkills} 个技能，正文未引用故未安装`)
     }
 
     await writeManualMarker(target, {
@@ -223,6 +229,105 @@ export async function installMarketExpert(
   } finally {
     await rm(staging, { recursive: true, force: true })
   }
+}
+
+/**
+ * Package-relative paths an expert's body points at.
+ *
+ * Most experts are self-contained prose, but some reference bundled material
+ * ("see `skills/browser-use/SKILL.md`", "![preview](assets/shot.png)"). Copying
+ * only the body would leave those links dangling, so the referenced files travel
+ * with it, at the same relative path.
+ *
+ * Deliberately narrow: only `skills/`, `references/`, `assets/`, `scripts/`,
+ * `templates/`, `prompts/` are considered, so ordinary prose or code snippets in
+ * the body are not mistaken for package paths.
+ */
+const REFERENCE_ROOT = /(?:^|[(\s`'"])((?:\.\/)?(?:skills|references|assets|scripts|templates|prompts|docs)\/[A-Za-z0-9_.\/-]+)/gu
+
+function extractReferences(body: string): string[] {
+  const found = new Set<string>()
+  for (const match of body.matchAll(REFERENCE_ROOT)) {
+    const candidate = match[1]
+    if (candidate === undefined) continue
+    // Reject traversal outright: a package must not be able to write outside
+    // the skill directory it is installing into.
+    if (candidate.includes('..')) continue
+    found.add(candidate.replace(/^\.\//u, '').replace(/[.,;:)]+$/u, ''))
+  }
+  return [...found]
+}
+
+const MAX_SINGLE_FILE = 5 * 1024 * 1024
+const MAX_TOTAL_COPY = 40 * 1024 * 1024
+const MAX_REFERENCE_FILES = 400
+
+/**
+ * Copy every referenced file (or whole directory) next to the installed body.
+ * Returns how many files were materialised.
+ */
+async function copyReferences(
+  body: string,
+  unpacked: string,
+  target: string,
+  warnings: string[],
+): Promise<number> {
+  const references = extractReferences(body)
+  if (references.length === 0) return 0
+
+  const available = new Set(await listFiles(unpacked))
+  const directories = new Set<string>()
+  for (const path of available) {
+    const segments = path.split('/')
+    for (let index = 1; index < segments.length; index++) directories.add(segments.slice(0, index).join('/'))
+  }
+
+  let copied = 0
+  let bytes = 0
+  const seen = new Set<string>()
+
+  const copyOne = async (relative: string, from: string): Promise<void> => {
+    if (seen.has(relative) || copied >= MAX_REFERENCE_FILES) return
+    if (relative.startsWith('agents/') || relative === 'SKILL.md') return
+    const buffer = await readFile(from)
+    if (buffer.length > MAX_SINGLE_FILE) {
+      warnings.push(`引用的 ${relative} 超过 5MB，未一并安装`)
+      return
+    }
+    if (bytes + buffer.length > MAX_TOTAL_COPY) {
+      warnings.push('引用的附件合计超过 40MB，剩余部分未一并安装')
+      return
+    }
+    const destination = join(target, relative)
+    await mkdir(dirname(destination), { recursive: true })
+    await writeFile(destination, buffer)
+    seen.add(relative)
+    copied += 1
+    bytes += buffer.length
+  }
+
+  for (const reference of references) {
+    // A referenced SKILL.md implies its whole directory: the file almost always
+    // links siblings (notes, references, fixtures) that only make sense together.
+    if (reference.endsWith('/SKILL.md')) {
+      const directory = reference.slice(0, -'/SKILL.md'.length)
+      for (const path of available) {
+        if (path.startsWith(`${directory}/`)) await copyOne(path, join(unpacked, path))
+      }
+      continue
+    }
+    if (available.has(reference)) {
+      await copyOne(reference, join(unpacked, reference))
+      continue
+    }
+    if (!directories.has(reference)) continue
+    for (const path of available) {
+      if (!path.startsWith(`${reference}/`)) continue
+      await copyOne(path, join(unpacked, path))
+    }
+  }
+
+  return copied
 }
 
 async function listFiles(root: string, prefix = ''): Promise<string[]> {
