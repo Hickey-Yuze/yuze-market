@@ -1,14 +1,11 @@
 /**
  * This plugin's rows inside the Host's shared 连接器 panel.
  *
- * Two kinds of rows are published:
- *
- * - one summary row (`Yuze-MCP 连接器`) that carries the marketplace mark and
- *   reports how many servers are wired up;
- * - one row per installed MCP server, named after its catalogue title and
- *   carrying its own brand icon, connection label and enable switch — the same
- *   shape the Host's own connectors use, so the panel reads as one list rather
- *   than a link into a sub-page.
+ * Only one row is published: the summary row (`Yuze-MCP 连接器`) that carries
+ * the marketplace mark and reports how many servers are wired up. Every
+ * installed MCP server is rendered as a child entry inside that row's detail,
+ * so the panel shows them as belonging to the Yuze-MCP connector rather than
+ * as sibling rows of it.
  *
  * `renderDetail()` is rendered by the hub as a **React child**
  * (`h('div', { className: 'dt-hub-detail' }, …, descriptor.renderDetail())`), so
@@ -17,19 +14,20 @@
  *
  * Rows are registered and disposed dynamically: the hub's `register` returns a
  * disposer and re-registering the same id replaces it, which is how a refresh
- * updates the list without a reload.
+ * updates the list without a reload. Older builds also published one row per
+ * server; re-attaching now disposes those leftover rows.
  */
 
 import { useEffect, useMemo, useState } from 'react'
 
 import { marketApi, type InstalledConnectorEntry } from './api.js'
 import { BRAND_LOGO } from './brand.js'
+import { ConnectorRow } from './ConnectorRow.js'
 import { describeAuth, useConnectorAuth } from './connector-auth.js'
 import type { AuthState } from './connector-auth.js'
 
 const HUB_KEY = '__dshConnectorHub'
 const SUMMARY_ID = 'yuze-mcp-connectors'
-const ROW_PREFIX = 'yuze-mcp-'
 
 /** One row's live state, as the hub expects it. */
 interface HubState {
@@ -89,16 +87,6 @@ async function readStatus(server: string): Promise<AuthState | null> {
   } catch {
     return null
   }
-}
-
-/** Label + tone for one installed server, matching what the panel expects. */
-function stateOf(entry: InstalledConnectorEntry): HubState {
-  if (!entry.enabled) return { state: 'off', label: '已停用' }
-  const auth = authByServer.get(entry.serverName)
-  if (entry.transport !== 'streamable-http') return { state: 'on', label: '已接入' }
-  if (auth?.authorized === true) return { state: 'on', label: '已连接' }
-  if (auth === undefined) return { state: 'on', label: '已接入' }
-  return { state: 'off', label: '待授权' }
 }
 
 function iconFor(entry: InstalledConnectorEntry): JSX.Element {
@@ -212,22 +200,23 @@ function ConnectorDetail(props: { readonly entry: InstalledConnectorEntry }): JS
 }
 
 /**
- * Summary body: a line of context only.
+ * Summary body: one child row per installed server.
  *
- * The installed servers already have a row each, so listing them again here
- * duplicated every name and every action. This panel explains where they are and
- * leaves the operations on the rows themselves.
+ * The child connectors live here — under the `Yuze-MCP 连接器` row — instead of
+ * as siblings in the shared panel, so it is clear they were installed by this
+ * connector. Each row carries the server's own icon, name, state, and the full
+ * authorize/toggle/remove actions.
  */
 function SummaryDetail(): JSX.Element {
   const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>('loading')
-  const [count, setCount] = useState(0)
+  const [localRows, setLocalRows] = useState<readonly InstalledConnectorEntry[]>([])
 
   useEffect(() => {
     let alive = true
     void refreshAll().then(
       () => {
         if (!alive) return
-        setCount(rows.length)
+        setLocalRows(rows)
         setPhase('ready')
       },
       () => {
@@ -241,15 +230,42 @@ function SummaryDetail(): JSX.Element {
 
   if (phase === 'loading') return <p className="qym-empty">读取中…</p>
   if (phase === 'error') return <p className="qym-error">读取失败，请重试</p>
-  if (count === 0) {
+  if (localRows.length === 0) {
     return <p className="qym-empty">还没有接入连接器。打开「市场 → 连接器」安装后会自动出现在这里。</p>
+  }
+
+  const refresh = async (): Promise<void> => {
+    await refreshAll()
+    setLocalRows(rows)
   }
 
   return (
     <div className="qym" data-qym-connector-detail="summary">
-      <p className="qym-hint">
-        已接入 {count} 个连接器，每个都在左侧单独一行：点开行可授权、停用或删除，行右侧的开关用于快速启用或停用。
-      </p>
+      <p className="qym-hint">这些连接器都由 Yuze-MCP 连接器接入：点行可授权、停用或删除。</p>
+      <ul className="qym-rows">
+        {localRows.map(entry => (
+          <ConnectorRow
+            key={entry.serverName}
+            serverName={entry.serverName}
+            transport={entry.transport}
+            enabled={entry.enabled}
+            title={nameFor(entry)}
+            icon={iconFor(entry)}
+            onToggleEnabled={(enabled: boolean) => {
+              void marketApi.setConnectorEnabled(entry.serverName, enabled).then(
+                () => refresh(),
+                () => undefined,
+              )
+            }}
+            onRemove={() => {
+              void marketApi.removeConnector(entry.serverName).then(
+                () => refresh(),
+                () => undefined,
+              )
+            }}
+          />
+        ))}
+      </ul>
     </div>
   )
 }
@@ -268,30 +284,6 @@ function summaryDescriptor(): HubDescriptor {
       }
     },
     renderDetail: () => <SummaryDetail />,
-  }
-}
-
-function rowDescriptor(entry: InstalledConnectorEntry, index: number): HubDescriptor {
-  const server = entry.serverName
-  const toggle = async (enabled: boolean): Promise<void> => {
-    await marketApi.setConnectorEnabled(server, enabled)
-    await refreshAll()
-  }
-  return {
-    id: `${ROW_PREFIX}${server}`,
-    name: nameFor(entry),
-    order: 100 + index,
-    icon: iconFor(entry),
-    getState: () => stateOf(entry),
-    subscribe(listener: () => void) {
-      listeners.add(listener)
-      return () => {
-        listeners.delete(listener)
-      }
-    },
-    enable: () => toggle(true),
-    disable: () => toggle(false),
-    renderDetail: () => <ConnectorDetail entry={entry} />,
   }
 }
 
@@ -323,25 +315,17 @@ async function refreshAll(): Promise<void> {
   syncRows()
 }
 
-/** Register/refresh one row per installed server, disposing the ones that left. */
+/**
+ * Only the summary row is registered; the child servers are all inside its
+ * detail. Any row left over from an older build (one row per server) is
+ * disposed here so a hot reload does not keep sibling rows on the panel.
+ */
 function syncRows(): void {
   const target = hub()
   if (target === undefined || typeof target.register !== 'function' || !attached) return
 
-  const alive = new Set<string>([SUMMARY_ID])
-  for (const [index, entry] of rows.entries()) {
-    const id = `${ROW_PREFIX}${entry.serverName}`
-    alive.add(id)
-    disposers.get(id)?.()
-    try {
-      disposers.set(id, target.register(rowDescriptor(entry, index)) as () => void)
-    } catch {
-      // A rejected descriptor must not take the other rows down.
-    }
-  }
-
   for (const [id, dispose] of [...disposers]) {
-    if (alive.has(id)) continue
+    if (id === SUMMARY_ID) continue
     dispose()
     disposers.delete(id)
   }
@@ -353,7 +337,11 @@ function syncRows(): void {
  */
 export function registerYuzeMcpConnector(): () => void {
   if (typeof document === 'undefined') return () => {}
-  if (attached) return () => {}
+  if (attached) {
+    // Hot reload: clear any per-server rows an older build left on the panel.
+    syncRows()
+    return () => {}
+  }
 
   const attach = (): boolean => {
     const target = hub()
