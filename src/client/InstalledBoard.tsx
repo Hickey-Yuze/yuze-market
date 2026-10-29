@@ -20,6 +20,7 @@ export interface InstalledBoardProps {
   readonly busyId?: string | undefined
   readonly onToggleSkill: (entry: InstalledSkillEntry) => void
   readonly onRemoveSkill: (entry: InstalledSkillEntry) => void
+  readonly onInvokeSkill: (entry: InstalledSkillEntry) => void
   readonly onToggleConnector: (entry: InstalledConnectorEntry) => void
   readonly onRemoveConnector: (entry: InstalledConnectorEntry) => void
   readonly onTogglePlugin: (entry: InstalledPluginEntry) => void
@@ -130,6 +131,7 @@ export function InstalledBoard(props: InstalledBoardProps): JSX.Element {
     busyId,
     onToggleSkill,
     onRemoveSkill,
+    onInvokeSkill,
     onToggleConnector,
     onRemoveConnector,
     onTogglePlugin,
@@ -160,6 +162,9 @@ export function InstalledBoard(props: InstalledBoardProps): JSX.Element {
               badge={<Badge tone={entry.enabled ? 'on' : 'off'}>{entry.enabled ? '已启用' : '已停用'}</Badge>}
               actions={
                 <>
+                  <button type="button" className="qym-btn qym-btn--primary" onClick={() => onInvokeSkill(entry)}>
+                    调用
+                  </button>
                   <button
                     type="button"
                     className="qym-btn"
@@ -195,6 +200,9 @@ export function InstalledBoard(props: InstalledBoardProps): JSX.Element {
               badge={<Badge tone={entry.enabled ? 'on' : 'off'}>{entry.enabled ? '已启用' : '已停用'}</Badge>}
               actions={
                 <>
+                  <button type="button" className="qym-btn qym-btn--primary" onClick={() => onInvokeSkill(entry)}>
+                    调用
+                  </button>
                   <button
                     type="button"
                     className="qym-btn"

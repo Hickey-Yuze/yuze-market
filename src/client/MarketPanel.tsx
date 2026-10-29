@@ -24,6 +24,7 @@ import { ConnectorRow } from './ConnectorRow.js'
 import { DetailSheet } from './DetailSheet.js'
 import { InstalledBoard } from './InstalledBoard.js'
 import { ManualSheet } from './ManualSheet.js'
+import { announceInstalledChanged, dispatchInvokeSkill } from './SkillInvokeDock.js'
 import { BRAND_LOGO as BRAND } from './brand.js'
 import { Badge, Card, Chip } from './ui.js'
 
@@ -194,6 +195,8 @@ export function MarketPanel(props: MarketPanelProps): JSX.Element {
       setNotice(message)
       await loadInstalled()
       await load(1, false)
+      // The composer dock lists installed entries; keep it in sync.
+      announceInstalledChanged()
     },
     [load, loadInstalled],
   )
@@ -565,6 +568,7 @@ export function MarketPanel(props: MarketPanelProps): JSX.Element {
             busyId={busyId}
             onToggleSkill={entry => void toggleSkill(entry)}
             onRemoveSkill={entry => void removeSkill(entry)}
+            onInvokeSkill={entry => dispatchInvokeSkill(entry.name)}
             onToggleConnector={entry => void toggleConnector(entry)}
             onRemoveConnector={entry => void removeConnector(entry)}
             onTogglePlugin={entry => void togglePlugin(entry)}
