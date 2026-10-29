@@ -12,12 +12,16 @@ export interface ConnectorRowProps {
   readonly serverName: string
   readonly transport: string
   readonly enabled: boolean
+  /** Catalogue title to display instead of the internal server name. */
+  readonly title?: string
+  /** Brand icon shown before the name, for child rows of the Yuze-MCP connector. */
+  readonly icon?: JSX.Element
   readonly onToggleEnabled: (enabled: boolean) => void
   readonly onRemove: () => void
 }
 
 export function ConnectorRow(props: ConnectorRowProps): JSX.Element {
-  const { serverName, transport, enabled, onToggleEnabled, onRemove } = props
+  const { serverName, transport, enabled, title, icon, onToggleEnabled, onRemove } = props
   const { auth, busy, message, pending, authorize, disconnect } = useConnectorAuth([serverName])
   const state = auth[serverName]
   const remote = transport === 'streamable-http'
@@ -27,7 +31,8 @@ export function ConnectorRow(props: ConnectorRowProps): JSX.Element {
     <li className="qym-row" data-qym-connector={serverName}>
       <div className="qym-rowMain">
         <span className="qym-rowName" title={serverName}>
-          {serverName}
+          {icon !== undefined ? <span className="qym-rowIcon">{icon}</span> : null}
+          {title ?? serverName}
         </span>
         <span className="qym-rowMeta">
           {describeAuth(state, pending?.server === serverName, transport)}

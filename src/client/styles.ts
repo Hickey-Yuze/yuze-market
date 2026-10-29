@@ -654,7 +654,9 @@ export const styles = `
 }
 .qym-row:hover { background: var(--qym-surface); border-color: var(--qym-border); }
 .qym-rowMain { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 1px; }
-.qym-rowName { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qym-rowName { font-size: 13px; display: flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qym-rowIcon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; }
+.qym-rowIcon img { width: 100%; height: 100%; object-fit: contain; }
 .qym-rowMeta { font-size: 11.5px; color: var(--qym-text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .qym-rowActions { flex: none; display: flex; align-items: center; gap: 6px; }
 
