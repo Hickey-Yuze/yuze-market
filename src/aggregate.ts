@@ -193,26 +193,15 @@ class MarketExperts {
 }
 
 /**
- * A cloud expert is installable while its captured signature is live. Running
- * the sync again refreshes both the row and its URL.
+ * Every cloud expert is installable.
+ *
+ * The signature is no longer carried in the snapshot (it expires in ~24h and has
+ * to be re-minted anyway), so the installer asks the local WorkBuddy for one at
+ * click time. A stale or missing `download_url` in the row therefore says nothing
+ * about installability — the request itself reports what went wrong (no
+ * WorkBuddy, needs a relaunch, upstream refuses).
  */
-function downloadState(raw: RawMarketExpert): Pick<UnifiedItem, 'installable' | 'installNote' | 'badge'> {
-  const url = raw.download_url
-  if (typeof url !== 'string' || url.length === 0) {
-    return {
-      installable: false,
-      installNote: '该专家还没有下载地址：先运行 `pnpm run sync:experts` 同步一次即可安装',
-      badge: '云端',
-    }
-  }
-  const expiresAt = typeof raw.download_expires_at === 'number' ? raw.download_expires_at : null
-  if (expiresAt !== null && expiresAt < Date.now()) {
-    return {
-      installable: false,
-      installNote: '下载地址已过期（签名约 24 小时），重新同步专家市场后可安装',
-      badge: '云端',
-    }
-  }
+function downloadState(_raw: RawMarketExpert): Pick<UnifiedItem, 'installable' | 'badge'> {
   return { installable: true, badge: '云端' }
 }
 

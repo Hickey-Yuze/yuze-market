@@ -401,13 +401,13 @@ try {
     check('云端专家并进列表', names.includes('cloud-live') && names.includes('cloud-stale'), names.join(','))
     check('按使用量降序', experts.body.items[0].name === 'cloud-live', names[0])
     const live = experts.body.items.find(item => item.name === 'cloud-live')
-    check('有效签名 → 可安装', live?.installable === true, JSON.stringify(live))
+    check('带地址的云端专家可安装', live?.installable === true, JSON.stringify(live))
     check('带使用量', live?.usage === 12345, live?.usage)
     check('带云端徽标', live?.badge === '云端', live?.badge)
     check('用 CDN 图标', String(live?.artUrl).startsWith('https://example.test'), live?.artUrl)
     const stale = experts.body.items.find(item => item.name === 'cloud-stale')
-    check('过期签名 → 不可安装', stale?.installable === false, JSON.stringify(stale))
-    check('过期给出重新同步提示', /重新同步|sync:experts/.test(stale?.installNote ?? ''), stale?.installNote)
+    // 签名改为安装时现取，快照里的过期地址不再决定可安装性
+    check('过期签名仍可尝试安装', stale?.installable === true, JSON.stringify(stale))
   }
 
   console.log('\n3. 搜索覆盖职业名 / 标签 / 英文描述')
