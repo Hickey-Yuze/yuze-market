@@ -83,7 +83,11 @@ export function apply(ctx: Context): void {
         ctx.slots.register(
           {
             name: 'conversation.input.dock',
-            key: 'yuze-market-skill-dock',
+            // List slot (kind:"list") registers by id, not key; keyed slots
+            // are a different kind and registering with key here throws
+            // "list slot requires options.id".
+            id: 'yuze-market-skill-dock',
+            order: 5,
             locale: NS,
             inject: () => ({ t }),
           },
