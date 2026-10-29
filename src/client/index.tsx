@@ -14,6 +14,7 @@ import { IconBrowseOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import { MarketPanel } from './MarketPanel.js'
 import { createDirectoryPicker } from './picker.js'
 import { registerYuzeMcpConnector } from './connector-hub.js'
+import { SkillInvokeDock } from './SkillInvokeDock.js'
 import { NS, en, zh } from './locales.js'
 import { styles } from './styles.js'
 
@@ -73,6 +74,27 @@ export function apply(ctx: Context): void {
       MarketPanel,
     ),
   )
+
+  // Composer dock: 点击调用技能/专家（搜索 + 点选即调用）。该 slot 是宿主
+  // session 级契约，Host 缺失时不注册，只影响快捷入口，不影响面板本身。
+  ctx.effect(() => {
+    try {
+      ctx.slots.inject('conversation.input.dock', () =>
+        ctx.slots.register(
+          {
+            name: 'conversation.input.dock',
+            key: 'yuze-market-skill-dock',
+            locale: NS,
+            inject: () => ({ t }),
+          },
+          SkillInvokeDock,
+        ),
+      )
+    } catch {
+      // Host without the dock slot: skip silently.
+    }
+    return () => {}
+  }, 'yuze-market: skill invoke dock')
 
   ctx.slots.inject('sidebar.panellist', () =>
     ctx.slots.register(
