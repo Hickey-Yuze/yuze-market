@@ -16,6 +16,16 @@ export interface DetailSheetProps {
   readonly installed?: InstalledSkillEntry
   readonly busy: boolean
   readonly notice?: string
+  /** Stage label while a long install runs (restart → signature → download). */
+  readonly progress?: string
+  /**
+   * Set when the install needs WorkBuddy relaunched for a fresh signature. The
+   * sheet has to own this prompt: it is the surface the user just clicked on,
+   * and the panel-level banner sits behind the scrim where nobody can reach it.
+   */
+  readonly restartPrompt?: string
+  readonly onConfirmRestart?: () => void
+  readonly onCancelRestart?: () => void
   readonly onClose: () => void
   readonly onInstall: () => void
   readonly onToggleEnabled?: (enabled: boolean) => void
@@ -38,7 +48,20 @@ function examplesOf(item: UnifiedItem): readonly string[] {
 }
 
 export function DetailSheet(props: DetailSheetProps): JSX.Element {
-  const { item, installed, busy, notice, onClose, onInstall, onToggleEnabled, onRemove } = props
+  const {
+    item,
+    installed,
+    busy,
+    notice,
+    progress,
+    restartPrompt,
+    onConfirmRestart,
+    onCancelRestart,
+    onClose,
+    onInstall,
+    onToggleEnabled,
+    onRemove,
+  } = props
   const [copied, setCopied] = useState<number | null>(null)
   const examples = examplesOf(item)
 
@@ -79,7 +102,7 @@ export function DetailSheet(props: DetailSheetProps): JSX.Element {
                   disabled={busy || !item.installable}
                   onClick={onInstall}
                 >
-                  {busy ? '安装中…' : item.installable ? '安装' : '不可安装'}
+                  {busy ? (progress ?? '安装中…') : item.installable ? '安装' : '不可安装'}
                 </button>
               ) : (
                 <>
@@ -109,6 +132,25 @@ export function DetailSheet(props: DetailSheetProps): JSX.Element {
             ×
           </button>
         </div>
+
+        {restartPrompt !== undefined && restartPrompt.length > 0 ? (
+          <div className="qym-note" data-snapshot-hint="">
+            <span>{restartPrompt}</span>
+            <span className="qym-actions">
+              <button type="button" className="qym-btn" onClick={onCancelRestart}>
+                取消
+              </button>
+              <button
+                type="button"
+                className="qym-btn qym-btn--primary"
+                disabled={busy}
+                onClick={onConfirmRestart}
+              >
+                {busy ? (progress ?? '处理中…') : '重启 WorkBuddy 并安装'}
+              </button>
+            </span>
+          </div>
+        ) : null}
 
         {notice !== undefined && notice.length > 0 ? (
           <p className="qym-note" data-tone={notice.startsWith('已') ? 'ok' : 'error'}>

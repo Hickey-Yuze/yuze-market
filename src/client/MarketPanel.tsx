@@ -81,6 +81,8 @@ export function MarketPanel(props: MarketPanelProps): JSX.Element {
   const [fetchingSnapshot, setFetchingSnapshot] = useState(false)
   /** Expert whose stale signature needs a WorkBuddy relaunch before installing. */
   const [restartFor, setRestartFor] = useState<UnifiedItem | undefined>(undefined)
+  /** Stage text while a cloud-expert install walks restart → signature → download. */
+  const [progress, setProgress] = useState<string | undefined>(undefined)
   const [snapshotNotice, setSnapshotNotice] = useState<string | undefined>(undefined)
   const alive = useRef(true)
   const searchRef = useRef<HTMLInputElement | null>(null)
@@ -200,26 +202,41 @@ export function MarketPanel(props: MarketPanelProps): JSX.Element {
     async (item: UnifiedItem, allowRestart = false): Promise<void> => {
       setBusyId(item.id)
       setNotice(undefined)
+      // A relaunch plus signature plus download takes ~15s with no server-sent
+      // progress, so narrate locally instead of leaving a dead "安装中…".
+      // Keep the restart prompt mounted while we run: it doubles as the place
+      // the progress text lives, then the finally block clears it.
+      const stages = allowRestart
+        ? ['正在重启 WorkBuddy…', '等待 WorkBuddy 就绪…', '获取下载链接…', '下载安装包…', '写入技能…']
+        : ['下载中…', '写入技能…']
+      let stage = 0
+      setProgress(stages[0])
+      const ticker = setInterval(() => {
+        stage = Math.min(stage + 1, stages.length - 1)
+        setProgress(stages[stage])
+      }, 4000)
       try {
         const result = await marketApi.install(item.id, { allowRestart })
         if (!result.ok) {
-          // The signature in the snapshot expired; getting a fresh one means
-          // relaunching WorkBuddy, which the user has to agree to first.
+          // Needs a relaunch the user has not agreed to yet. The sheet owns the
+          // prompt because the panel banner sits behind its scrim, so keep the
+          // notice empty and let the prompt block speak.
           if (result.code === 'need-restart') {
             setRestartFor(item)
-            setNotice(result.message ?? '需要重启 WorkBuddy 才能获取新的下载地址')
             return
           }
           setNotice(result.message ?? '安装失败')
           return
         }
-        setRestartFor(undefined)
         await afterMutation(
           item.tab === 'connector' || item.tab === 'plugin' ? '已安装，重启 Harness 后生效' : '安装完成',
         )
       } catch (cause) {
         setNotice(cause instanceof Error ? cause.message : String(cause))
       } finally {
+        clearInterval(ticker)
+        setProgress(undefined)
+        setRestartFor(undefined)
         setBusyId(undefined)
       }
     },
@@ -497,13 +514,20 @@ export function MarketPanel(props: MarketPanelProps): JSX.Element {
           </div>
         ) : null}
 
-        {restartFor !== undefined ? (
+        {/* Only shown when the user installed straight from a card; the detail
+            sheet owns its own copy of this prompt. */}
+        {restartFor !== undefined && (openItem === undefined || openItem.id !== restartFor.id) ? (
           <div className="qym-note" data-snapshot-hint="">
             <span>
-              该专家的下载地址已过期（签名 24 小时）。重启 WorkBuddy 打开调试端口即可现取一个（约 1 分钟，未保存的内容请先保存）。
+              云端专家的安装包要用 WorkBuddy 的登录态换一个下载链接。重启 WorkBuddy 一次（约 15 秒，未保存的内容请先保存）就能装。
             </span>
             <span className="qym-actions">
-              <button type="button" className="qym-btn" onClick={() => setRestartFor(undefined)}>
+              <button
+                type="button"
+                className="qym-btn"
+                disabled={busyId !== undefined}
+                onClick={() => setRestartFor(undefined)}
+              >
                 取消
               </button>
               <button
@@ -512,11 +536,10 @@ export function MarketPanel(props: MarketPanelProps): JSX.Element {
                 disabled={busyId !== undefined}
                 onClick={() => {
                   const item = restartFor
-                  setRestartFor(undefined)
                   void install(item, true)
                 }}
               >
-                {busyId !== undefined ? '处理中…' : '重启并安装'}
+                {busyId !== undefined ? (progress ?? '处理中…') : '重启 WorkBuddy 并安装'}
               </button>
             </span>
           </div>
@@ -589,6 +612,18 @@ export function MarketPanel(props: MarketPanelProps): JSX.Element {
           {...(detailEntry === undefined ? {} : { installed: detailEntry })}
           busy={busyId !== undefined}
           {...(notice === undefined ? {} : { notice })}
+          {...(progress === undefined ? {} : { progress })}
+          {...(restartFor !== undefined && restartFor.id === openItem.id
+            ? {
+                restartPrompt:
+                  '云端专家的安装包要用 WorkBuddy 的登录态换一个下载链接。重启 WorkBuddy 一次（约 15 秒，未保存的内容请先保存）就能装，之后同一台机器上再装其余云端专家一般无需重启。',
+                onConfirmRestart: () => void install(openItem, true),
+                onCancelRestart: () => {
+                  setRestartFor(undefined)
+                  setNotice(undefined)
+                },
+              }
+            : {})}
           onClose={() => setOpenId(undefined)}
           onInstall={() => void install(openItem)}
           {...(detailEntry === undefined
