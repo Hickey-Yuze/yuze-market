@@ -215,6 +215,11 @@ export function MarketPanel(props: MarketPanelProps): JSX.Element {
         stage = Math.min(stage + 1, stages.length - 1)
         setProgress(stages[stage])
       }, 4000)
+      // The restart prompt must survive this run: the server answered
+      // need-restart, so we surface the banner for the user to agree to the
+      // relaunch. Clearing it in the finally block would batch-react away the
+      // state we just set (the reason clicks used to look dead).
+      let keepRestart = false
       try {
         const result = await marketApi.install(item.id, { allowRestart })
         if (!result.ok) {
@@ -223,6 +228,7 @@ export function MarketPanel(props: MarketPanelProps): JSX.Element {
           // notice empty and let the prompt block speak.
           if (result.code === 'need-restart') {
             setRestartFor(item)
+            keepRestart = true
             return
           }
           setNotice(result.message ?? '安装失败')
@@ -236,7 +242,7 @@ export function MarketPanel(props: MarketPanelProps): JSX.Element {
       } finally {
         clearInterval(ticker)
         setProgress(undefined)
-        setRestartFor(undefined)
+        if (!keepRestart) setRestartFor(undefined)
         setBusyId(undefined)
       }
     },
