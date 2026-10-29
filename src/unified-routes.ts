@@ -191,7 +191,14 @@ export function mountUnifiedRoutes(register: (route: Route) => () => void, deps:
           sendJson(response, 400, { error: 'bad-request', message: '缺少 id' })
           return
         }
-        sendJson(response, 200, await installById(id, deps, installDeps))
+        // `allowRestart` is the user's consent to relaunch WorkBuddy for a fresh
+        // download signature. Dropping it here made that consent a no-op: every
+        // cloud expert answered `need-restart` no matter how often it was clicked.
+        sendJson(
+          response,
+          200,
+          await installById(id, deps, installDeps, { allowRestart: body?.allowRestart === true }),
+        )
         return
       }
 

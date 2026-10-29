@@ -102,7 +102,7 @@ export async function installMarketExpert(
         target: source.expertId,
         kind: 'skill',
         code: 'download-expired',
-        message: '该专家的下载地址已过期（签名约 24 小时有效），请重新同步专家市场后再安装',
+        message: '这个下载链接刚刚过期，请重试一次（会自动换新的链接）',
       },
       warnings,
     }
@@ -120,7 +120,7 @@ export async function installMarketExpert(
           code: `http-${response.status}`,
           message:
             response.status === 403
-              ? '下载地址已失效（403），请重新同步专家市场后再安装'
+              ? '下载链接已失效（403），请重试一次以换取新链接'
               : `下载专家包失败：HTTP ${response.status}`,
         },
         warnings,

@@ -684,6 +684,24 @@ try {
     const cross = await post('/enable', { name: 'beta', enabled: false }, { origin: 'https://evil.test' })
     check('跨域 → 403', cross.status === 403, cross.status)
   }
+
+  console.log('\n12. 安装路由透传 allowRestart')
+  {
+    // Regression: the route used to drop the body flag, so "重启 WorkBuddy 并安装"
+    // re-sent the request the server had just refused and answered `need-restart`
+    // forever — the button looked dead.
+    const routes = await readFile(join(process.cwd(), 'scratch', 'server-out', 'unified-routes.js'), 'utf8')
+    check(
+      '安装分支读取 body.allowRestart',
+      /allowRestart\s*:\s*body\?\.allowRestart\s*===\s*true/u.test(routes),
+      '未在 unified-routes 安装分支找到 allowRestart 透传',
+    )
+    check(
+      'installById 把 allowRestart 透传给现取签名',
+      /allowRestart\s*:\s*options\.allowRestart\s*===\s*true/u.test(routes),
+      'installById 未把 allowRestart 传给 fetchLiveExpertUrl',
+    )
+  }
 } finally {
   dispose()
   server.close()

@@ -203,7 +203,8 @@ export async function fetchLiveExpertUrl(
       return {
         ok: false,
         needRestart: true,
-        message: '需要重启 WorkBuddy 以打开调试端口（约 1 分钟），确认后重试',
+        message:
+          '云端专家要用 WorkBuddy 的登录态换一个下载链接，需要重启 WorkBuddy 一次（约 15 秒）。确认后即可安装，之后 24 小时内再装其他云端专家通常无需重启。',
       }
     }
     const running = (await cdpTargets(port)) === undefined
