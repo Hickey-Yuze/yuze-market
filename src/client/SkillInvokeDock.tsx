@@ -35,6 +35,8 @@ import { Avatar } from './ui.js'
 export interface InputActions {
   /** Replace the whole draft. */
   setDraft(text: string): void
+  /** Attach one user-invocable skill as durable injected context. */
+  attachSkill?(skillName: string): void
   /** Enter submission (slash pipeline / default sink inside). */
   submit(): void
 }
@@ -171,16 +173,18 @@ export function SkillInvokeDock(props: SkillInvokeDockProps): JSX.Element {
   )
 
   /** 点选/取消一项：单选替换（新选覆盖旧选；点已选项则清空），收起浮层。
-   *  选中只更新 chip（标记「当前会话跟随此技能」）——不碰输入框草稿、
-   *  不发送任何消息：技能/专家装好后已在会话技能目录（模型可自主加载），
-   *  无需输入 `/名字`；要显式激活用行右侧「调用」。 */
+   *  选中分支调用宿主 `inputActions.attachSkill`——把技能全文作为
+   *  `skill-invocation` 消息 followup 落盘进当前会话上下文（UI 显示「已注入
+   *  技能」标签）：不碰输入框草稿、不发送任何可见消息，模型此后每轮都会
+   *  看到该技能；要立即显式调用用行右侧「调用」。 */
   const toggleSelected = useCallback(
     (entry: InstalledSkillEntry): void => {
       const isSelected = selected.some(item => item.name === entry.name)
       setSelected(isSelected ? [] : [entry])
       setOpen(false)
+      if (!isSelected) inputActions?.attachSkill?.(entry.name)
     },
-    [selected],
+    [selected, inputActions],
   )
 
   const removeSelected = useCallback((name: string): void => {
