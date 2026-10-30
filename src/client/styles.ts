@@ -10,7 +10,9 @@
 
 export const styles = `
 .qym,
-.qym-scrim {
+.qym-scrim,
+.qym-skillTrigger,
+.qym-skillMenu {
   --qym-primary-50: #eef4ff;
   --qym-primary-100: #dbe7ff;
   --qym-primary-500: #3b6ef6;
@@ -44,7 +46,9 @@ export const styles = `
 }
 @media (prefers-color-scheme: dark) {
   .qym,
-  .qym-scrim {
+  .qym-scrim,
+  .qym-skillTrigger,
+  .qym-skillMenu {
     --qym-primary-50: #16213c;
     --qym-primary-100: #1d2c50;
     --qym-primary-500: #6b95ff;
