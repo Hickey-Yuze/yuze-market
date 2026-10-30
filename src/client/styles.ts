@@ -884,5 +884,6 @@ export const styles = `
 }
 .qym-skillRowGo:hover { background: var(--qym-primary-50); }
 .qym-skillEmpty { margin: 10px 6px 4px; font-size: 12.5px; line-height: 18px; color: var(--qym-text-3); }
+.qym-skillAttachError { margin: 8px 6px 2px; padding: 6px 10px; font-size: 12px; line-height: 17px; color: #b42318; background: #fef3f2; border: 1px solid #fee4e2; border-radius: 8px; }
 .qym-skillGroupCount { font-size: 11px; color: var(--qym-text-3); }
 `
