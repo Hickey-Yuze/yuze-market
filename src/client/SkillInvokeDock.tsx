@@ -35,9 +35,6 @@ import { Avatar } from './ui.js'
 export interface InputActions {
   /** Replace the whole draft. */
   setDraft(text: string): void
-  /** Attach one user-invocable skill as durable injected context.
-   *  Resolves with the admission result so callers can surface failures. */
-  attachSkill?(skillName: string, signal?: AbortSignal): Promise<unknown> | void
   /** Enter submission (slash pipeline / default sink inside). */
   submit(): void
 }
@@ -173,48 +170,32 @@ export function SkillInvokeDock(props: SkillInvokeDockProps): JSX.Element {
     [inputActions],
   )
 
-  /** 注入失败提示（attachSkill 调用失败或宿主不支持时显示）。 */
-  const [attachError, setAttachError] = useState<string | null>(null)
-
-  /** 把技能/专家全文注入当前会话上下文（宿主 attachSkill Remote）。
-   *  成功：宿主对话区出现「注入」标签消息；失败：在浮层给出可见提示。 */
-  const attachSkill = useCallback(
-    async (entry: InstalledSkillEntry): Promise<void> => {
-      if (typeof inputActions?.attachSkill !== 'function') {
-        setAttachError(`当前宿主不支持技能注入（attachSkill 不可用），已仅标记选中。`)
-        return
-      }
-      try {
-        const result = await inputActions.attachSkill(entry.name)
-        if (
-          result !== undefined &&
-          result !== null &&
-          (result as { ok?: boolean }).ok === false
-        ) {
-          const err = (result as { error?: { message?: string } }).error
-          setAttachError(`注入失败：${err?.message ?? '未知错误'}`)
-        }
-      } catch (e) {
-        setAttachError(`注入失败：${(e as Error | undefined)?.message ?? String(e)}`)
-      }
+  /** 选中载入：把调用指令 `/名字 ` 填入会话输入草稿，**不自动发送**——
+   *  由用户回车确认后宿主 slash 流水线才载入技能跟随会话，避免
+   *  `/12306` 被当作普通消息直接发出去。 */
+  const loadDraft = useCallback(
+    (name: string): void => {
+      inputActions?.setDraft(`/${name} `)
+      setOpen(false)
     },
     [inputActions],
   )
 
   /** 点选/取消一项：单选替换（新选覆盖旧选；点已选项则清空），收起浮层。
-   *  选中分支调用宿主 `inputActions.attachSkill`——把技能全文作为
-   *  `skill-invocation` 消息 followup 落盘进当前会话上下文（UI 显示「已注入
-   *  技能」标签）：不碰输入框草稿、不发送任何可见消息，模型此后每轮都会
-   *  看到该技能；要立即显式调用用行右侧「调用」。 */
+   *  选中分支把 `/名字 ` 填入输入框草稿（不发送，等用户回车）——走宿主
+   *  原生 `/name` 手势激活技能跟随会话；取消选中只清 chip，不改动草稿；
+   *  要立即显式调用用行右侧「调用」（setDraft+submit）。 */
   const toggleSelected = useCallback(
     (entry: InstalledSkillEntry): void => {
       const isSelected = selected.some(item => item.name === entry.name)
-      setAttachError(null)
       setSelected(isSelected ? [] : [entry])
-      setOpen(false)
-      if (!isSelected) void attachSkill(entry)
+      if (isSelected) {
+        setOpen(false)
+      } else {
+        loadDraft(entry.name)
+      }
     },
-    [selected, attachSkill],
+    [selected, loadDraft],
   )
 
   const removeSelected = useCallback((name: string): void => {
@@ -337,7 +318,6 @@ export function SkillInvokeDock(props: SkillInvokeDockProps): JSX.Element {
               onChange={event => setQuery(event.target.value)}
               autoFocus
             />
-            {attachError ? <p className="qym-skillAttachError">{attachError}</p> : null}
             {total === 0 ? (
               <p className="qym-skillEmpty">还没有安装任何技能或专家。到 Yuze-市场安装后再回来。</p>
             ) : (
