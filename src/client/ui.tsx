@@ -36,7 +36,7 @@ function tint(title: string): string {
 
 export interface AvatarProps {
   readonly item: Pick<UnifiedItem, 'artUrl' | 'emoji' | 'title'>
-  readonly size?: 'sm' | 'md' | 'lg'
+  readonly size?: 'xs' | 'sm' | 'md' | 'lg'
 }
 
 /** Brand artwork with a coloured initial fallback that never shows a broken image. */
@@ -45,14 +45,16 @@ export function Avatar(props: AvatarProps): JSX.Element {
   const [broken, setBroken] = useState(false)
   const showImage = item.artUrl !== undefined && item.artUrl.length > 0 && !broken
   const sized =
-    size === 'md'
-      ? undefined
-      : {
-          width: size === 'lg' ? 76 : 30,
-          height: size === 'lg' ? 76 : 30,
-          borderRadius: size === 'lg' ? 17 : 8,
-          fontSize: size === 'lg' ? 34 : 15,
-        }
+    size === 'xs'
+      ? { width: 24, height: 24, borderRadius: '50%', fontSize: 12 }
+      : size === 'md'
+        ? undefined
+        : {
+            width: size === 'lg' ? 76 : 30,
+            height: size === 'lg' ? 76 : 30,
+            borderRadius: size === 'lg' ? 17 : 8,
+            fontSize: size === 'lg' ? 34 : 15,
+          }
 
   return (
     <span className="qym-avatar" style={showImage ? sized : { background: tint(item.title), ...sized }} aria-hidden="true">
