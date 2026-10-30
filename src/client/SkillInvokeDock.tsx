@@ -8,9 +8,11 @@
  * Two interactions coexist here:
  *  - 点击列表行主体（头像 + 名称）→ 加入/移出「已选」集合，工具条就地渲染
  *    圆形头像 + 名称的胶囊 chip（未选 ⇄ 已选），浮层随之收起；单选替换——
- *    再点触发器可重选另一项直接覆盖，无需先移除；
- *  - 点击行右侧「调用」→ 维持原行为：setDraft('/'+name) + submit，走宿主
- *    slash 流水线直接加载技能。
+ *    再点触发器可重选另一项直接覆盖，无需先移除。选中时把调用指令
+ *    `/名字 ` 填入会话输入草稿（**不自动发送**），由用户回车确认后走宿主
+ *    slash 流水线载入技能跟随会话——避免 `/12306` 被当普通消息直接发出去；
+ *  - 点击行右侧「调用」→ 显式立即调用：setDraft('/'+name) + submit，走宿主
+ *    slash 流水线直接加载技能（用户主动触发时才发送）。
  *
  * The entry lists installed entries only (what the user can actually invoke),
  * with a search box to jump to one. The market panel keeps the install/remove
@@ -154,6 +156,8 @@ export function SkillInvokeDock(props: SkillInvokeDockProps): JSX.Element {
     }
   }, [])
 
+  /** 显式「调用」：setDraft('/'+name) + submit，立即走宿主 slash 流水线。
+   *  仅由「调用」按钮与市场面板调用事件触发（用户主动动作）。 */
   const invoke = useCallback(
     (name: string): void => {
       inputActions?.setDraft(`/${name}`)
@@ -163,9 +167,20 @@ export function SkillInvokeDock(props: SkillInvokeDockProps): JSX.Element {
     [inputActions],
   )
 
+  /** 选中载入：把调用指令 `/名字 ` 填入会话输入草稿，**不自动发送**——
+   *  由用户回车确认后宿主 slash 流水线才载入技能跟随会话，避免
+   *  `/12306` 被当作普通消息直接发出去。 */
+  const loadDraft = useCallback(
+    (name: string): void => {
+      inputActions?.setDraft(`/${name} `)
+      setOpen(false)
+    },
+    [inputActions],
+  )
+
   /** 点选/取消一项：单选替换（新选覆盖旧选；点已选项则清空），收起浮层。
-   *  选中时同时跟随会话调用——setDraft('/'+name) + submit，让该技能在当前
-   *  会话生效；取消选中只清 chip，不额外发消息。 */
+   *  选中时把 `/名字 ` 填入草稿（不提交，等用户回车载入技能跟随会话）；
+   *  取消选中只清 chip，不改动草稿。 */
   const toggleSelected = useCallback(
     (entry: InstalledSkillEntry): void => {
       const isSelected = selected.some(item => item.name === entry.name)
@@ -173,10 +188,10 @@ export function SkillInvokeDock(props: SkillInvokeDockProps): JSX.Element {
       if (isSelected) {
         setOpen(false)
       } else {
-        invoke(entry.name)
+        loadDraft(entry.name)
       }
     },
-    [selected, invoke],
+    [selected, loadDraft],
   )
 
   const removeSelected = useCallback((name: string): void => {
@@ -294,7 +309,7 @@ export function SkillInvokeDock(props: SkillInvokeDockProps): JSX.Element {
             <input
               type="text"
               className="qym-skillSearch"
-              placeholder="搜索技能或专家，点击即调用…"
+              placeholder="搜索技能或专家，点选填入 /指令，回车跟随会话…"
               value={query}
               onChange={event => setQuery(event.target.value)}
               autoFocus
