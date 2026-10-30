@@ -665,34 +665,61 @@ export const styles = `
   .qym-searchKbd { display: none; }
 }
 
-/* Composer dock —— 点击调用技能/专家。挂在宿主 conversation.input.dock 槽，
-   随宿主会话区排版；面板自带 qym 变量作用域（宿主区域无 .qym 包裹）。 */
-.qym-skillDock { box-sizing: border-box; width: 100%; padding: 2px 0; }
-.qym-skillDockTrigger {
+/* Composer input-left entry —— 点击调用技能/专家。挂在宿主
+   conversation.input.left 工具行（连接器入口左边），触发器为紧凑工具按钮，
+   点击在其上方弹出 qym-skillMenu 浮层（自带 qym 变量作用域）。 */
+.qym-skillTrigger {
   appearance: none;
   font: inherit;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  width: 100%;
+  gap: 6px;
+  height: 30px;
   box-sizing: border-box;
-  padding: 6px 14px;
+  padding: 0 10px;
   border: 1px solid var(--qym-border);
-  border-radius: var(--qym-radius-md);
+  border-radius: var(--qym-radius-full);
   background: var(--qym-surface);
   color: var(--qym-text-2);
   font-size: 13px;
   line-height: 18px;
+  white-space: nowrap;
   cursor: pointer;
   transition: all var(--qym-t-fast);
 }
-.qym-skillDockTrigger:hover { border-color: var(--qym-primary-500); color: var(--qym-primary-600); }
-.qym-skillDockTrigger[data-active='true'] { border-color: var(--qym-primary-500); color: var(--qym-primary-600); }
-.qym-skillDockLabel { font-weight: 500; }
-.qym-skillDockPanel {
+.qym-skillTrigger:hover { border-color: var(--qym-primary-500); color: var(--qym-primary-600); }
+.qym-skillTrigger[aria-expanded='true'] { border-color: var(--qym-primary-500); color: var(--qym-primary-600); }
+.qym-skillTriggerLabel { font-weight: 500; }
+.qym-skillTriggerIcon { flex: none; }
+.qym-skillTriggerCount {
+  min-width: 18px;
+  height: 18px;
   box-sizing: border-box;
-  width: 100%;
-  margin-top: 6px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--qym-radius-full);
+  background: var(--qym-primary-50);
+  color: var(--qym-primary-600);
+  font-size: 11px;
+  line-height: 18px;
+}
+.qym-skillScrim {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+.qym-skillMenu {
+  position: fixed;
+  z-index: 1000;
+  box-sizing: border-box;
+  max-height: min(420px, calc(100vh - 24px));
+  overflow-y: auto;
   padding: 10px;
   border: 1px solid var(--qym-border);
   border-radius: var(--qym-radius-md);
@@ -764,4 +791,6 @@ export const styles = `
   white-space: nowrap;
 }
 .qym-skillRowGo { flex: none; font-size: 12px; color: var(--qym-primary-600); }
+.qym-skillEmpty { margin: 10px 6px 4px; font-size: 12.5px; line-height: 18px; color: var(--qym-text-3); }
+.qym-skillGroupCount { font-size: 11px; color: var(--qym-text-3); }
 `
