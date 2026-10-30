@@ -685,16 +685,32 @@ export const styles = `
 .qym-skillChip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   height: 30px;
   flex: none;
   box-sizing: border-box;
-  padding: 0 8px 0 6px;
+  padding: 0 8px 0 4px;
   border: 1px solid var(--qym-border);
   border-radius: 18px;
   background: var(--qym-surface);
   box-shadow: var(--qym-shadow-sm);
 }
+.qym-skillChip:hover { border-color: var(--qym-primary-500); }
+.qym-skillChipMain {
+  appearance: none;
+  font: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--qym-text-1);
+  cursor: pointer;
+  transition: background var(--qym-t-fast);
+}
+.qym-skillChipMain:hover { background: var(--qym-primary-50); }
 .qym-skillChipName {
   font-size: 13px;
   font-weight: 700;

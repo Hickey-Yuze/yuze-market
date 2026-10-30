@@ -71,13 +71,27 @@ function avatarItem(entry: InstalledSkillEntry): { title: string; artUrl?: strin
   return { title: entry.title, ...(entry.artUrl === undefined ? {} : { artUrl: entry.artUrl }) }
 }
 
-/** 已选胶囊 chip：圆形头像 + 加粗名称 + 移除按钮，工具条上就地展示。 */
-function SelectedChip(props: { readonly entry: InstalledSkillEntry; readonly onRemove: () => void }): JSX.Element {
-  const { entry, onRemove } = props
+/** 已选胶囊 chip：圆形头像 + 加粗名称 + 移除按钮。主体可点——点它重开浮层重选，
+ * 不必先 ✕ 移除；✕ 才是清除选中。 */
+function SelectedChip(props: {
+  readonly entry: InstalledSkillEntry
+  readonly chipRef?: (node: HTMLSpanElement | null) => void
+  readonly onReopen: () => void
+  readonly onRemove: () => void
+}): JSX.Element {
+  const { entry, chipRef, onReopen, onRemove } = props
   return (
-    <span className="qym-skillChip">
-      <Avatar size="xs" item={avatarItem(entry)} />
-      <span className="qym-skillChipName">{entry.title}</span>
+    <span className="qym-skillChip" ref={chipRef}>
+      <button
+        type="button"
+        className="qym-skillChipMain"
+        title="点击重选技能 / 专家"
+        aria-label={`重选：${entry.title}`}
+        onClick={onReopen}
+      >
+        <Avatar size="xs" item={avatarItem(entry)} />
+        <span className="qym-skillChipName">{entry.title}</span>
+      </button>
       <button type="button" className="qym-skillChipRemove" aria-label={`移除 ${entry.title}`} onClick={onRemove}>
         ×
       </button>
@@ -129,6 +143,7 @@ export function SkillInvokeDock(props: SkillInvokeDockProps): JSX.Element {
   const [selected, setSelected] = useState<readonly InstalledSkillEntry[]>([])
   const [pos, setPos] = useState<PopoverPos | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
+  const chipRef = useRef<HTMLSpanElement | null>(null)
 
   const load = useCallback(async (): Promise<void> => {
     try {
@@ -162,10 +177,10 @@ export function SkillInvokeDock(props: SkillInvokeDockProps): JSX.Element {
     setOpen(false)
   }, [])
 
-  // Anchor the popover just above the trigger, clamped to the viewport —
-  // same placement the shared 连接器 panel uses (qw-dingtalk fallback path).
-  const place = useCallback((): void => {
-    const el = triggerRef.current
+  // Anchor the popover just above the trigger (or the selected chip, when the
+  // trigger is hidden), clamped to the viewport — same placement the shared
+  // 连接器 panel uses (qw-dingtalk fallback path).
+  const place = useCallback((el: HTMLElement | null): void => {
     const view = typeof window === 'undefined' ? null : window
     if (!el || typeof el.getBoundingClientRect !== 'function' || !view) {
       setPos(null)
@@ -185,6 +200,15 @@ export function SkillInvokeDock(props: SkillInvokeDockProps): JSX.Element {
       width: `${Math.round(width)}px`,
     })
   }, [])
+
+  /** 打开/收起浮层，锚点为已选 chip（若在）否则触发器按钮。 */
+  const toggleMenu = useCallback((): void => {
+    setOpen(prev => {
+      if (prev) return false
+      place(chipRef.current ?? triggerRef.current)
+      return true
+    })
+  }, [place])
 
   useEffect(() => {
     void load()
@@ -215,42 +239,44 @@ export function SkillInvokeDock(props: SkillInvokeDockProps): JSX.Element {
   return (
     <span className="qym-skillBar">
       {selected.length > 0 ? (
-        <SelectedChip entry={selected[0]!} onRemove={() => removeSelected(selected[0]!.name)} />
+        <SelectedChip
+          entry={selected[0]!}
+          chipRef={node => {
+            chipRef.current = node
+          }}
+          onReopen={toggleMenu}
+          onRemove={() => removeSelected(selected[0]!.name)}
+        />
       ) : null}
-      <button
-        ref={triggerRef}
-        type="button"
-        className="qym-skillTrigger"
-        title="技能 / 专家"
-        aria-label="技能 / 专家"
-        aria-expanded={open}
-        onClick={() => {
-          if (open) {
-            close()
-            return
-          }
-          place()
-          setOpen(true)
-        }}
-      >
-        <svg
-          className="qym-skillTriggerIcon"
-          width="15"
-          height="15"
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.4"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
+      {selected.length === 0 ? (
+        <button
+          ref={triggerRef}
+          type="button"
+          className="qym-skillTrigger"
+          title="技能 / 专家"
+          aria-label="技能 / 专家"
+          aria-expanded={open}
+          onClick={toggleMenu}
         >
-          <path d="M8 4.5C6.6 3.3 4.5 3 3 3v9c1.5 0 3.6.3 5 1.5 1.4-1.2 3.5-1.5 5-1.5V3c-1.5 0-3.6.3-5 1.5z" />
-          <path d="M8 4.5v9" />
-        </svg>
-        <span className="qym-skillTriggerLabel">技能 / 专家</span>
-        {total > 0 ? <span className="qym-skillTriggerCount">{total}</span> : null}
-      </button>
+          <svg
+            className="qym-skillTriggerIcon"
+            width="15"
+            height="15"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M8 4.5C6.6 3.3 4.5 3 3 3v9c1.5 0 3.6.3 5 1.5 1.4-1.2 3.5-1.5 5-1.5V3c-1.5 0-3.6.3-5 1.5z" />
+            <path d="M8 4.5v9" />
+          </svg>
+          <span className="qym-skillTriggerLabel">技能 / 专家</span>
+          {total > 0 ? <span className="qym-skillTriggerCount">{total}</span> : null}
+        </button>
+      ) : null}
       {open ? (
         <>
           <div className="qym-skillScrim" onClick={close} />
