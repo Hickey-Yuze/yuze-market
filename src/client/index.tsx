@@ -75,19 +75,20 @@ export function apply(ctx: Context): void {
     ),
   )
 
-  // Composer dock: 点击调用技能/专家（搜索 + 点选即调用）。该 slot 是宿主
-  // session 级契约，Host 缺失时不注册，只影响快捷入口，不影响面板本身。
+  // Composer input-left tool row: 点击调用技能/专家，排在连接器入口（order 40）
+  // 左边。该槽是宿主 session 级契约，Host 缺失时不注册，只影响快捷入口。
   ctx.effect(() => {
     try {
-      ctx.slots.inject('conversation.input.dock', () =>
+      ctx.slots.inject('conversation.input.left', () =>
         ctx.slots.register(
           {
-            name: 'conversation.input.dock',
+            name: 'conversation.input.left',
             // List slot (kind:"list") registers by id, not key; keyed slots
             // are a different kind and registering with key here throws
             // "list slot requires options.id".
             id: 'yuze-market-skill-dock',
-            order: 5,
+            order: 30,
+            label: () => '技能 / 专家',
             locale: NS,
             inject: () => ({ t }),
           },
@@ -95,7 +96,7 @@ export function apply(ctx: Context): void {
         ),
       )
     } catch {
-      // Host without the dock slot: skip silently.
+      // Host without the slot: skip silently.
     }
     return () => {}
   }, 'yuze-market: skill invoke dock')
