@@ -163,11 +163,21 @@ export function SkillInvokeDock(props: SkillInvokeDockProps): JSX.Element {
     [inputActions],
   )
 
-  /** 点选/取消一项：单选替换（新选覆盖旧选；点已选项则清空），收起浮层。 */
-  const toggleSelected = useCallback((entry: InstalledSkillEntry): void => {
-    setSelected(prev => (prev.some(item => item.name === entry.name) ? [] : [entry]))
-    setOpen(false)
-  }, [])
+  /** 点选/取消一项：单选替换（新选覆盖旧选；点已选项则清空），收起浮层。
+   *  选中时同时跟随会话调用——setDraft('/'+name) + submit，让该技能在当前
+   *  会话生效；取消选中只清 chip，不额外发消息。 */
+  const toggleSelected = useCallback(
+    (entry: InstalledSkillEntry): void => {
+      const isSelected = selected.some(item => item.name === entry.name)
+      setSelected(isSelected ? [] : [entry])
+      if (isSelected) {
+        setOpen(false)
+      } else {
+        invoke(entry.name)
+      }
+    },
+    [selected, invoke],
+  )
 
   const removeSelected = useCallback((name: string): void => {
     setSelected(prev => prev.filter(item => item.name !== name))
