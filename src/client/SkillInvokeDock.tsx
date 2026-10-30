@@ -124,7 +124,7 @@ export function SkillInvokeDock(props: SkillInvokeDockProps): JSX.Element {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [entries, setEntries] = useState<readonly InstalledSkillEntry[]>([])
-  /** 已选技能/专家（按 name 去重），渲染为工具条上的 chip 行。 */
+  /** 已选技能/专家（单选，最多一项），渲染为工具条上的 chip。 */
   const [selected, setSelected] = useState<readonly InstalledSkillEntry[]>([])
   const [pos, setPos] = useState<PopoverPos | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
@@ -147,13 +147,9 @@ export function SkillInvokeDock(props: SkillInvokeDockProps): JSX.Element {
     [inputActions],
   )
 
-  /** 点选/取消一项：写入已选集合并收起浮层，工具条就地渲染 chip。 */
+  /** 点选/取消一项：单选替换（新选覆盖旧选；点已选项则清空），收起浮层。 */
   const toggleSelected = useCallback((entry: InstalledSkillEntry): void => {
-    setSelected(prev =>
-      prev.some(item => item.name === entry.name)
-        ? prev.filter(item => item.name !== entry.name)
-        : [...prev, entry],
-    )
+    setSelected(prev => (prev.some(item => item.name === entry.name) ? [] : [entry]))
     setOpen(false)
   }, [])
 
@@ -217,43 +213,45 @@ export function SkillInvokeDock(props: SkillInvokeDockProps): JSX.Element {
 
   return (
     <span className="qym-skillBar">
-      {selected.map(entry => (
-        <SelectedChip key={entry.name} entry={entry} onRemove={() => removeSelected(entry.name)} />
-      ))}
-      <button
-        ref={triggerRef}
-        type="button"
-        className="qym-skillTrigger"
-        title="技能 / 专家"
-        aria-label="技能 / 专家"
-        aria-expanded={open}
-        onClick={() => {
-          if (open) {
-            close()
-            return
-          }
-          place()
-          setOpen(true)
-        }}
-      >
-        <svg
-          className="qym-skillTriggerIcon"
-          width="15"
-          height="15"
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.4"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
+      {selected.length > 0 ? (
+        <SelectedChip entry={selected[0]!} onRemove={() => removeSelected(selected[0]!.name)} />
+      ) : null}
+      {selected.length === 0 ? (
+        <button
+          ref={triggerRef}
+          type="button"
+          className="qym-skillTrigger"
+          title="技能 / 专家"
+          aria-label="技能 / 专家"
+          aria-expanded={open}
+          onClick={() => {
+            if (open) {
+              close()
+              return
+            }
+            place()
+            setOpen(true)
+          }}
         >
-          <path d="M8 4.5C6.6 3.3 4.5 3 3 3v9c1.5 0 3.6.3 5 1.5 1.4-1.2 3.5-1.5 5-1.5V3c-1.5 0-3.6.3-5 1.5z" />
-          <path d="M8 4.5v9" />
-        </svg>
-        <span className="qym-skillTriggerLabel">技能 / 专家</span>
-        {total > 0 ? <span className="qym-skillTriggerCount">{total}</span> : null}
-      </button>
+          <svg
+            className="qym-skillTriggerIcon"
+            width="15"
+            height="15"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M8 4.5C6.6 3.3 4.5 3 3 3v9c1.5 0 3.6.3 5 1.5 1.4-1.2 3.5-1.5 5-1.5V3c-1.5 0-3.6.3-5 1.5z" />
+            <path d="M8 4.5v9" />
+          </svg>
+          <span className="qym-skillTriggerLabel">技能 / 专家</span>
+          {total > 0 ? <span className="qym-skillTriggerCount">{total}</span> : null}
+        </button>
+      ) : null}
       {open ? (
         <>
           <div className="qym-skillScrim" onClick={close} />
