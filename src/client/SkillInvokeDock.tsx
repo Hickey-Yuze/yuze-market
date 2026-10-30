@@ -7,7 +7,8 @@
  *
  * Two interactions coexist here:
  *  - 点击列表行主体（头像 + 名称）→ 加入/移出「已选」集合，工具条就地渲染
- *    圆形头像 + 名称的胶囊 chip（未选 ⇄ 已选），浮层随之收起；
+ *    圆形头像 + 名称的胶囊 chip（未选 ⇄ 已选），浮层随之收起；单选替换——
+ *    再点触发器可重选另一项直接覆盖，无需先移除；
  *  - 点击行右侧「调用」→ 维持原行为：setDraft('/'+name) + submit，走宿主
  *    slash 流水线直接加载技能。
  *
@@ -216,42 +217,40 @@ export function SkillInvokeDock(props: SkillInvokeDockProps): JSX.Element {
       {selected.length > 0 ? (
         <SelectedChip entry={selected[0]!} onRemove={() => removeSelected(selected[0]!.name)} />
       ) : null}
-      {selected.length === 0 ? (
-        <button
-          ref={triggerRef}
-          type="button"
-          className="qym-skillTrigger"
-          title="技能 / 专家"
-          aria-label="技能 / 专家"
-          aria-expanded={open}
-          onClick={() => {
-            if (open) {
-              close()
-              return
-            }
-            place()
-            setOpen(true)
-          }}
+      <button
+        ref={triggerRef}
+        type="button"
+        className="qym-skillTrigger"
+        title="技能 / 专家"
+        aria-label="技能 / 专家"
+        aria-expanded={open}
+        onClick={() => {
+          if (open) {
+            close()
+            return
+          }
+          place()
+          setOpen(true)
+        }}
+      >
+        <svg
+          className="qym-skillTriggerIcon"
+          width="15"
+          height="15"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
         >
-          <svg
-            className="qym-skillTriggerIcon"
-            width="15"
-            height="15"
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M8 4.5C6.6 3.3 4.5 3 3 3v9c1.5 0 3.6.3 5 1.5 1.4-1.2 3.5-1.5 5-1.5V3c-1.5 0-3.6.3-5 1.5z" />
-            <path d="M8 4.5v9" />
-          </svg>
-          <span className="qym-skillTriggerLabel">技能 / 专家</span>
-          {total > 0 ? <span className="qym-skillTriggerCount">{total}</span> : null}
-        </button>
-      ) : null}
+          <path d="M8 4.5C6.6 3.3 4.5 3 3 3v9c1.5 0 3.6.3 5 1.5 1.4-1.2 3.5-1.5 5-1.5V3c-1.5 0-3.6.3-5 1.5z" />
+          <path d="M8 4.5v9" />
+        </svg>
+        <span className="qym-skillTriggerLabel">技能 / 专家</span>
+        {total > 0 ? <span className="qym-skillTriggerCount">{total}</span> : null}
+      </button>
       {open ? (
         <>
           <div className="qym-skillScrim" onClick={close} />
