@@ -11,6 +11,7 @@
 export const styles = `
 .qym,
 .qym-scrim,
+.qym-skillBar,
 .qym-skillTrigger,
 .qym-skillMenu {
   --qym-primary-50: #eef4ff;
@@ -47,6 +48,7 @@ export const styles = `
 @media (prefers-color-scheme: dark) {
   .qym,
   .qym-scrim,
+  .qym-skillBar,
   .qym-skillTrigger,
   .qym-skillMenu {
     --qym-primary-50: #16213c;
@@ -671,7 +673,53 @@ export const styles = `
 
 /* Composer input-left entry —— 点击调用技能/专家。挂在宿主
    conversation.input.left 工具行（连接器入口左边），触发器为紧凑工具按钮，
-   点击在其上方弹出 qym-skillMenu 浮层（自带 qym 变量作用域）。 */
+   点击在其上方弹出 qym-skillMenu 浮层（自带 qym 变量作用域）。
+   已选技能/专家以胶囊 chip 就地渲染在同一工具条（未选 ⇄ 已选）。 */
+.qym-skillBar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.qym-skillChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  flex: none;
+  box-sizing: border-box;
+  padding: 0 8px 0 6px;
+  border: 1px solid var(--qym-border);
+  border-radius: 18px;
+  background: var(--qym-surface);
+  box-shadow: var(--qym-shadow-sm);
+}
+.qym-skillChipName {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--qym-text-1);
+  white-space: nowrap;
+}
+.qym-skillChipRemove {
+  appearance: none;
+  font: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--qym-text-3);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all var(--qym-t-fast);
+}
+.qym-skillChipRemove:hover { color: var(--qym-danger); background: var(--qym-danger-bg); }
 .qym-skillTrigger {
   appearance: none;
   font: inherit;
@@ -761,12 +809,20 @@ export const styles = `
 }
 .qym-skillGroup ul { list-style: none; margin: 0; padding: 0; }
 .qym-skillRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.qym-skillRowMain {
   appearance: none;
   font: inherit;
   display: flex;
   align-items: center;
   gap: 10px;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   box-sizing: border-box;
   padding: 7px 8px;
   border: none;
@@ -777,7 +833,9 @@ export const styles = `
   cursor: pointer;
   transition: background var(--qym-t-fast);
 }
-.qym-skillRow:hover { background: var(--qym-primary-50); }
+.qym-skillRowMain:hover { background: var(--qym-primary-50); }
+.qym-skillRow[data-selected='true'] .qym-skillRowMain { background: var(--qym-primary-50); }
+.qym-skillRowSelected { flex: none; font-size: 11px; color: var(--qym-primary-600); }
 .qym-skillRowText { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .qym-skillRowTitle {
   font-size: 13px;
@@ -794,7 +852,21 @@ export const styles = `
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.qym-skillRowGo { flex: none; font-size: 12px; color: var(--qym-primary-600); }
+.qym-skillRowGo {
+  appearance: none;
+  font: inherit;
+  flex: none;
+  box-sizing: border-box;
+  padding: 5px 10px;
+  border: none;
+  border-radius: var(--qym-radius-sm);
+  background: transparent;
+  color: var(--qym-primary-600);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background var(--qym-t-fast);
+}
+.qym-skillRowGo:hover { background: var(--qym-primary-50); }
 .qym-skillEmpty { margin: 10px 6px 4px; font-size: 12.5px; line-height: 18px; color: var(--qym-text-3); }
 .qym-skillGroupCount { font-size: 11px; color: var(--qym-text-3); }
 `

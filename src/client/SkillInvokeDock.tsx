@@ -1,12 +1,15 @@
 /**
- * Composer input-left entry —— 点击调用技能 / 专家。
+ * Composer input-left entry —— 技能 / 专家：点选后在工具条就地渲染 chip。
  *
  * Registers into the Host's session-scoped `conversation.input.left` tool row,
  * ordered before the shared 连接器 entry (order 40), so it sits 连接器左边.
- * The framework injects `inputActions` (setDraft + submit). Picking an
- * installed skill or expert here calls it exactly like the user had typed
- * `/name` and hit send: setDraft('/'+name) then submit, so the Host slash
- * pipeline loads the skill.
+ * The framework injects `inputActions` (setDraft + submit).
+ *
+ * Two interactions coexist here:
+ *  - 点击列表行主体（头像 + 名称）→ 加入/移出「已选」集合，工具条就地渲染
+ *    圆形头像 + 名称的胶囊 chip（未选 ⇄ 已选），浮层随之收起；
+ *  - 点击行右侧「调用」→ 维持原行为：setDraft('/'+name) + submit，走宿主
+ *    slash 流水线直接加载技能。
  *
  * The entry lists installed entries only (what the user can actually invoke),
  * with a search box to jump to one. The market panel keeps the install/remove
@@ -63,18 +66,48 @@ function matches(entry: InstalledSkillEntry, query: string): boolean {
   )
 }
 
-function DockRow(props: { readonly entry: InstalledSkillEntry; readonly onPick: () => void }): JSX.Element {
-  const { entry, onPick } = props
+function avatarItem(entry: InstalledSkillEntry): { title: string; artUrl?: string } {
+  return { title: entry.title, ...(entry.artUrl === undefined ? {} : { artUrl: entry.artUrl }) }
+}
+
+/** 已选胶囊 chip：圆形头像 + 加粗名称 + 移除按钮，工具条上就地展示。 */
+function SelectedChip(props: { readonly entry: InstalledSkillEntry; readonly onRemove: () => void }): JSX.Element {
+  const { entry, onRemove } = props
+  return (
+    <span className="qym-skillChip">
+      <Avatar size="xs" item={avatarItem(entry)} />
+      <span className="qym-skillChipName">{entry.title}</span>
+      <button type="button" className="qym-skillChipRemove" aria-label={`移除 ${entry.title}`} onClick={onRemove}>
+        ×
+      </button>
+    </span>
+  )
+}
+
+function DockRow(props: {
+  readonly entry: InstalledSkillEntry
+  readonly selected: boolean
+  /** 点击行主体：切换选中（就地 chip / 取消）。 */
+  readonly onSelect: () => void
+  /** 点击「调用」：维持原直接调用行为。 */
+  readonly onCall: () => void
+}): JSX.Element {
+  const { entry, selected, onSelect, onCall } = props
   return (
     <li>
-      <button type="button" className="qym-skillRow" onClick={onPick}>
-        <Avatar size="sm" item={{ title: entry.title, ...(entry.artUrl === undefined ? {} : { artUrl: entry.artUrl }) }} />
-        <span className="qym-skillRowText">
-          <span className="qym-skillRowTitle">{entry.title}</span>
-          <span className="qym-skillRowName">/{entry.name}</span>
-        </span>
-        <span className="qym-skillRowGo">调用</span>
-      </button>
+      <div className="qym-skillRow" data-selected={selected ? 'true' : 'false'}>
+        <button type="button" className="qym-skillRowMain" aria-pressed={selected} onClick={onSelect}>
+          <Avatar size="sm" item={avatarItem(entry)} />
+          <span className="qym-skillRowText">
+            <span className="qym-skillRowTitle">{entry.title}</span>
+            <span className="qym-skillRowName">/{entry.name}</span>
+          </span>
+          {selected ? <span className="qym-skillRowSelected">已选</span> : null}
+        </button>
+        <button type="button" className="qym-skillRowGo" onClick={onCall}>
+          调用
+        </button>
+      </div>
     </li>
   )
 }
@@ -91,6 +124,8 @@ export function SkillInvokeDock(props: SkillInvokeDockProps): JSX.Element {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [entries, setEntries] = useState<readonly InstalledSkillEntry[]>([])
+  /** 已选技能/专家（按 name 去重），渲染为工具条上的 chip 行。 */
+  const [selected, setSelected] = useState<readonly InstalledSkillEntry[]>([])
   const [pos, setPos] = useState<PopoverPos | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
 
@@ -111,6 +146,20 @@ export function SkillInvokeDock(props: SkillInvokeDockProps): JSX.Element {
     },
     [inputActions],
   )
+
+  /** 点选/取消一项：写入已选集合并收起浮层，工具条就地渲染 chip。 */
+  const toggleSelected = useCallback((entry: InstalledSkillEntry): void => {
+    setSelected(prev =>
+      prev.some(item => item.name === entry.name)
+        ? prev.filter(item => item.name !== entry.name)
+        : [...prev, entry],
+    )
+    setOpen(false)
+  }, [])
+
+  const removeSelected = useCallback((name: string): void => {
+    setSelected(prev => prev.filter(item => item.name !== name))
+  }, [])
 
   const close = useCallback((): void => {
     setOpen(false)
@@ -164,9 +213,13 @@ export function SkillInvokeDock(props: SkillInvokeDockProps): JSX.Element {
   const experts = entries.filter(entry => entry.kind === 'expert' && matches(entry, query))
   const total = entries.length
   const filtered = skills.length + experts.length
+  const selectedNames = new Set(selected.map(item => item.name))
 
   return (
-    <>
+    <span className="qym-skillBar">
+      {selected.map(entry => (
+        <SelectedChip key={entry.name} entry={entry} onRemove={() => removeSelected(entry.name)} />
+      ))}
       <button
         ref={triggerRef}
         type="button"
@@ -224,7 +277,13 @@ export function SkillInvokeDock(props: SkillInvokeDockProps): JSX.Element {
                     </div>
                     <ul>
                       {skills.map(entry => (
-                        <DockRow key={entry.name} entry={entry} onPick={() => invoke(entry.name)} />
+                        <DockRow
+                          key={entry.name}
+                          entry={entry}
+                          selected={selectedNames.has(entry.name)}
+                          onSelect={() => toggleSelected(entry)}
+                          onCall={() => invoke(entry.name)}
+                        />
                       ))}
                     </ul>
                   </div>
@@ -236,7 +295,13 @@ export function SkillInvokeDock(props: SkillInvokeDockProps): JSX.Element {
                     </div>
                     <ul>
                       {experts.map(entry => (
-                        <DockRow key={entry.name} entry={entry} onPick={() => invoke(entry.name)} />
+                        <DockRow
+                          key={entry.name}
+                          entry={entry}
+                          selected={selectedNames.has(entry.name)}
+                          onSelect={() => toggleSelected(entry)}
+                          onCall={() => invoke(entry.name)}
+                        />
                       ))}
                     </ul>
                   </div>
@@ -251,6 +316,6 @@ export function SkillInvokeDock(props: SkillInvokeDockProps): JSX.Element {
           </div>
         </>
       ) : null}
-    </>
+    </span>
   )
 }
