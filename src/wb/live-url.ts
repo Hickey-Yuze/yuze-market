@@ -46,7 +46,7 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
-/** Windows WorkBuddy executable candidates (Squirrel/NSIS common installs). */
+/** Windows WorkBuddy executable candidates (Squirrel/NSIS + drive-root installs). */
 function windowsCandidates(): readonly string[] {
   const candidates: string[] = []
   const dirs = [
@@ -60,6 +60,17 @@ function windowsCandidates(): readonly string[] {
     if (dir === undefined) continue
     for (const appDir of appDirs) {
       for (const exe of exes) candidates.push(join(dir, appDir, exe))
+    }
+  }
+  // Drive-root installs (e.g. D:\WorkBuddy\WorkBuddy.exe) — cheap ENOENT
+  // probes, so sweep the common letters plus the system drive once.
+  const letters = ['C', 'D', 'E', 'F', 'G']
+  if (process.env.SystemDrive !== undefined && !letters.includes(process.env.SystemDrive.slice(0, 1).toUpperCase())) {
+    letters.push(process.env.SystemDrive.slice(0, 1).toUpperCase())
+  }
+  for (const letter of letters) {
+    for (const appDir of appDirs) {
+      for (const exe of exes) candidates.push(join(`${letter}:\\`, appDir, exe))
     }
   }
   return candidates
