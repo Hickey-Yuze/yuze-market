@@ -242,9 +242,16 @@ export function mountUnifiedRoutes(register: (route: Route) => () => void, deps:
           sendJson(response, 400, { error: 'bad-request', message: '缺少 serverName' })
           return
         }
+        // Removal is keyed by the entry's real `- id:` — which carries the
+        // `mcp-wbm-` prefix plus the *market item name*, not necessarily the
+        // serverName (e.g. entry id `mcp-wbm-58pic-qiantu-ai` with serverName
+        // `qiantu-ai`). Rebuild the id from serverName only as a fallback for
+        // hand-written entries that never went through the market installer.
+        const installed = body?.remove === true ? await listInstalledConnectors(mcpDeps) : []
+        const matched = installed.find(entry => entry.serverName === serverName)
         const result =
           body?.remove === true
-            ? await uninstallConnectorMcp(`mcp-wbm-${serverName}`, mcpDeps)
+            ? await uninstallConnectorMcp(matched?.id ?? `mcp-wbm-${serverName}`, mcpDeps)
             : await setConnectorEnabled(serverName, body?.enabled !== false, mcpDeps)
         sendJson(response, result.ok ? 200 : 409, result)
         return
