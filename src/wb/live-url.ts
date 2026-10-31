@@ -16,8 +16,10 @@
  * `allowRestart: false` reports `needRestart` and the caller asks first.
  */
 
-import { spawn } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { access } from 'node:fs/promises'
+import { basename, join } from 'node:path'
+import { promisify } from 'node:util'
 
 export interface LiveUrlResult {
   readonly ok: boolean
@@ -42,6 +44,89 @@ async function exists(path: string): Promise<boolean> {
   } catch {
     return false
   }
+}
+
+/** Windows WorkBuddy executable candidates (Squirrel/NSIS common installs). */
+function windowsCandidates(): readonly string[] {
+  const candidates: string[] = []
+  const dirs = [
+    process.env.LOCALAPPDATA !== undefined ? join(process.env.LOCALAPPDATA, 'Programs') : undefined,
+    process.env.PROGRAMFILES,
+    process.env['PROGRAMFILES(X86)'],
+  ]
+  const appDirs = ['WorkBuddy', 'workbuddy']
+  const exes = ['WorkBuddy.exe', 'workbuddy.exe', 'Electron.exe']
+  for (const dir of dirs) {
+    if (dir === undefined) continue
+    for (const appDir of appDirs) {
+      for (const exe of exes) candidates.push(join(dir, appDir, exe))
+    }
+  }
+  return candidates
+}
+
+const UNINSTALL_HIVES = [
+  'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall',
+  'HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall',
+  'HKLM\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall',
+]
+
+/** Resolve WorkBuddy's install location from the Uninstall registry keys. */
+async function registryBinary(): Promise<string | undefined> {
+  const execFileAsync = promisify(execFile)
+  for (const hive of UNINSTALL_HIVES) {
+    try {
+      const { stdout } = await execFileAsync('reg', ['query', hive, '/s', '/f', 'WorkBuddy', '/d'], {
+        windowsHide: true,
+        timeout: 15000,
+      })
+      let displayName = ''
+      let installLocation: string | undefined
+      for (const raw of stdout.split(/\r?\n/)) {
+        const line = raw.trim()
+        const keyMatch = /^(HKEY_[A-Z_]+\\\S+)$/.exec(line)
+        if (keyMatch !== null) {
+          // A key match starts a new Uninstall entry; test the finished one.
+          if (displayName !== '' && installLocation !== undefined) {
+            for (const exe of ['WorkBuddy.exe', 'workbuddy.exe', 'Electron.exe']) {
+              const path = join(installLocation, exe)
+              if (await exists(path)) return path
+            }
+          }
+          displayName = ''
+          installLocation = undefined
+          continue
+        }
+        const nameMatch = /^DisplayName\s+REG_\w+\s+(.+)$/.exec(line)
+        if (nameMatch !== null) displayName = (nameMatch[1] ?? '').trim().replace(/^"|"$/g, '')
+        const locMatch = /^InstallLocation\s+REG_\w+\s+(.+)$/.exec(line)
+        if (locMatch !== null) installLocation = (locMatch[1] ?? '').trim().replace(/^"|"$/g, '')
+      }
+      if (displayName !== '' && installLocation !== undefined) {
+        for (const exe of ['WorkBuddy.exe', 'workbuddy.exe', 'Electron.exe']) {
+          const path = join(installLocation, exe)
+          if (await exists(path)) return path
+        }
+      }
+    } catch {
+      // reg query failed for this hive (missing key, no permissions…); try the next.
+    }
+  }
+  return undefined
+}
+
+/** Resolve the platform WorkBuddy executable (macOS + Windows installs). */
+async function resolveWorkBuddyBinary(): Promise<string | undefined> {
+  if (process.platform === 'darwin') {
+    return (await exists(APP_BINARY)) ? APP_BINARY : undefined
+  }
+  if (process.platform === 'win32') {
+    for (const candidate of windowsCandidates()) {
+      if (await exists(candidate)) return candidate
+    }
+    return registryBinary()
+  }
+  return undefined
 }
 
 interface CdpTarget {
@@ -150,20 +235,28 @@ async function connectCdp(port: number): Promise<CdpLink | undefined> {
   }
 }
 
-/** Relaunch WorkBuddy with its debugging port open (macOS only today). */
-async function relaunchWithCdp(port: number, running: boolean): Promise<boolean> {
-  if (process.platform !== 'darwin') return false
-
-  if (running) {
-    spawn('osascript', ['-e', 'tell application "WorkBuddy" to quit'], { stdio: 'ignore' })
-    await sleep(4000)
+/** Relaunch WorkBuddy with its debugging port open (macOS + Windows). */
+async function relaunchWithCdp(port: number, running: boolean, binary: string): Promise<boolean> {
+  if (process.platform === 'darwin') {
+    if (running) {
+      spawn('osascript', ['-e', 'tell application "WorkBuddy" to quit'], { stdio: 'ignore' })
+      await sleep(4000)
+    }
+    spawn('pkill', ['-f', 'WorkBuddy.app/Contents/MacOS/Electron'], { stdio: 'ignore' })
+    await sleep(2500)
+  } else if (process.platform === 'win32') {
+    if (running) {
+      spawn('taskkill', ['/IM', basename(binary), '/F'], { stdio: 'ignore', windowsHide: true })
+      await sleep(4000)
+    }
+  } else {
+    return false
   }
-  spawn('pkill', ['-f', 'WorkBuddy.app/Contents/MacOS/Electron'], { stdio: 'ignore' })
-  await sleep(2500)
 
-  const child = spawn(APP_BINARY, [], {
+  const child = spawn(binary, [], {
     detached: true,
     stdio: 'ignore',
+    windowsHide: true,
     env: { ...process.env, WORKBUDDY_REMOTE_DEBUGGING_PORT: String(port) },
   })
   child.unref()
@@ -187,14 +280,19 @@ export async function fetchLiveExpertUrl(
 ): Promise<LiveUrlResult> {
   const port = options.port ?? DEFAULT_PORT
 
-  if (process.platform !== 'darwin') {
+  const binary = await resolveWorkBuddyBinary()
+  if (binary === undefined) {
+    if (process.platform === 'win32') {
+      return {
+        ok: false,
+        message:
+          '本机没有找到 WorkBuddy（常见安装位置与注册表均未命中），无法自动刷新下载地址；请在 WorkBuddy 内安装，或手动导入 zip',
+      }
+    }
     return {
       ok: false,
-      message: '自动刷新下载地址目前仅支持 macOS；其他平台请在 WorkBuddy 内安装，或手动导入 zip',
+      message: '自动刷新下载地址目前仅支持 macOS 与 Windows；其他平台请在 WorkBuddy 内安装，或手动导入 zip',
     }
-  }
-  if (!(await exists(APP_BINARY))) {
-    return { ok: false, message: '本机没有安装 WorkBuddy，无法获取签名下载地址' }
   }
 
   let open = (await cdpTargets(port)) !== undefined
@@ -208,7 +306,7 @@ export async function fetchLiveExpertUrl(
       }
     }
     const running = (await cdpTargets(port)) === undefined
-    if (!(await relaunchWithCdp(port, running))) {
+    if (!(await relaunchWithCdp(port, running, binary))) {
       return { ok: false, message: '重启 WorkBuddy 后仍无法连接调试端口' }
     }
     open = true
