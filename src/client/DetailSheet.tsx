@@ -102,7 +102,7 @@ export function DetailSheet(props: DetailSheetProps): JSX.Element {
                   disabled={busy || !item.installable}
                   onClick={onInstall}
                 >
-                  {busy ? (progress ?? '安装中…') : item.installable ? '安装' : '不可安装'}
+                  {busy ? (progress ?? '安装中…') : item.installable ? '安装' : item.badge === '云端技能' ? '需在 WorkBuddy 安装' : '不可安装'}
                 </button>
               ) : (
                 <>

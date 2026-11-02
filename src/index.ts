@@ -27,6 +27,7 @@ import { mountOAuthRoutes } from './oauth/routes.js'
 import { ensureBundledAssets } from './bootstrap-assets.js'
 import { mountUnifiedRoutes } from './unified-routes.js'
 import { findConnectorUrl, setConnectorHeaders } from './wb/mcp-install.js'
+import { createCloudSkillClient } from './wb/skillhub.js'
 
 export const name = 'yuze-market'
 
@@ -129,6 +130,7 @@ export function apply(ctx: Context, config: QurworkMarketConfig = {}): void {
         expertSnapshot: join(dshHome, 'workbuddy-market', 'cache', 'experts-market.json'),
         skillSnapshot: join(dshHome, 'workbuddy-market', 'cache', 'skills-market.json'),
         skillTranslation: join(dshHome, 'workbuddy-market', 'cache', 'skills-zh.json'),
+        cloudSkills: createCloudSkillClient(),
       })
       const disposeUnified = mountUnifiedRoutes(route => hostCtx.webServer.register(route), {
         aggregator,

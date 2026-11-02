@@ -13,11 +13,12 @@
  * an install without the client passing a URL back to the Host.
  */
 
-import { readFile } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 
 import type { MarketApiClient } from './market-api.js'
 import type { MarketPlugin, MarketSkill } from './shared/types.js'
-import type { MarketCatalog } from './wb/catalog.js'
+import { transportLabel, type MarketCatalog } from './wb/catalog.js'
+import type { CloudSkillClient, CloudSkillRow } from './wb/skillhub.js'
 import type { MarketItem, MarketKind } from './wb/types.js'
 
 export type Tab = 'skill' | 'expert' | 'connector' | 'plugin'
@@ -81,6 +82,8 @@ export function artUrlFor(id: string): string {
 const REMOTE_TTL_MS = 5 * 60_000
 const REMOTE_PAGE_SIZE = 200
 const REMOTE_MAX_PAGES = 12
+/** Cloud skill hits per search: enough to be useful, few enough to stay fast. */
+const CLOUD_SKILL_LIMIT = 12
 
 interface RemoteCache<T> {
   at: number
@@ -269,29 +272,51 @@ class LocalSkills {
   private cache: { at: number; items: readonly UnifiedItem[] } = { at: 0, items: [] }
   private raw = new Map<string, RawLocalSkill>()
   private zh = new Map<string, SkillTranslation>()
+  private zhMtime = 0
 
   constructor(
     private readonly file: string,
     private readonly zhFile?: string,
   ) {}
 
+  /**
+   * Re-read the Chinese dictionary when the file changes.
+   *
+   * It used to be read once per process (`if (this.zh.size === 0)`), so a
+   * translation pass only showed up after a host restart — which is exactly the
+   * kind of stale state that makes the UI look untranslated.
+   */
+  private async reloadTranslations(): Promise<void> {
+    if (this.zhFile === undefined) return
+    let mtime: number
+    try {
+      mtime = (await stat(this.zhFile)).mtimeMs
+    } catch {
+      return
+    }
+    if (mtime === this.zhMtime) return
+    this.zhMtime = mtime
+    try {
+      const parsed = JSON.parse(await readFile(this.zhFile, 'utf8')) as { map?: Record<string, SkillTranslation> }
+      this.zh.clear()
+      for (const [name, value] of Object.entries(parsed.map ?? {})) {
+        if (typeof value?.title === 'string' || typeof value?.description === 'string') this.zh.set(name, value)
+      }
+      // Titles and descriptions just changed, so the rendered items must too.
+      this.cache = { at: 0, items: [] }
+    } catch {
+      // A half-written file keeps the previous dictionary instead of blanking it.
+    }
+  }
+
   async all(): Promise<readonly UnifiedItem[]> {
+    await this.reloadTranslations()
     if (this.cache.items.length > 0 && Date.now() - this.cache.at < REMOTE_TTL_MS) return this.cache.items
     let raw: { items?: readonly RawLocalSkill[] }
     try {
       raw = JSON.parse(await readFile(this.file, 'utf8')) as { items?: readonly RawLocalSkill[] }
     } catch {
       return this.cache.items
-    }
-    if (this.zh.size === 0 && this.zhFile !== undefined) {
-      try {
-        const parsed = JSON.parse(await readFile(this.zhFile, 'utf8')) as { map?: Record<string, SkillTranslation> }
-        for (const [name, value] of Object.entries(parsed.map ?? {})) {
-          if (typeof value?.title === 'string' || typeof value?.description === 'string') this.zh.set(name, value)
-        }
-      } catch {
-        // No translation pass yet: the English copy stays visible.
-      }
     }
     const items: UnifiedItem[] = []
     for (const entry of raw.items ?? []) {
@@ -407,6 +432,10 @@ function localItem(item: MarketItem): UnifiedItem {
   // the vendor's own page shows); the person's name stays searchable.
   const isExpert = item.kind === 'expert'
   const title = isExpert && item.profession !== undefined && item.profession.length > 0 ? item.profession : item.title
+  // Connectors carry no category column upstream; their rail groups by MCP
+  // transport instead, which is the only property that changes what installing
+  // one actually does (and it is what the older /catalog route already does).
+  const category = item.kind === 'connector' ? transportLabel(item.mcp?.transport) : item.category
   const search = [
     item.title,
     item.titleEn,
@@ -425,7 +454,7 @@ function localItem(item: MarketItem): UnifiedItem {
     description: item.description,
     ...(item.version == null ? {} : { version: item.version }),
     tags: item.tags ?? [],
-    ...(item.category == null || item.category.length === 0 ? {} : { category: item.category }),
+    ...(category == null || category.length === 0 ? {} : { category }),
     ...(item.emoji == null ? {} : { emoji: item.emoji }),
     artUrl: artUrlFor(id),
     ...(item.examples == null ? {} : { examples: item.examples }),
@@ -453,6 +482,33 @@ function remoteSkill(item: MarketSkill): UnifiedItem {
     ...(item.categories[0] === undefined ? {} : { category: item.categories[0] }),
     artUrl: artUrlFor(id),
     installable: true,
+  }
+}
+
+/**
+ * A SkillHub row, shown read-only.
+ *
+ * These exist because WorkBuddy's market sells skills this machine never
+ * downloaded — "12306 Train Assistant" lives only up there. Installing them is
+ * WorkBuddy's job, so the row carries a note instead of an install action.
+ */
+function cloudSkill(row: CloudSkillRow): UnifiedItem {
+  return {
+    id: row.id,
+    tab: 'skill',
+    origin: 'remote',
+    name: row.slug,
+    title: row.title,
+    description: row.description,
+    ...(row.version === undefined ? {} : { version: row.version }),
+    ...(row.author === undefined ? {} : { author: row.author }),
+    tags: ['云端', ...(row.source === undefined ? [] : [row.source])],
+    category: '云端技能',
+    badge: '云端技能',
+    ...(row.installs === undefined ? {} : { usage: row.installs }),
+    search: [row.title, row.description, row.source ?? '', row.author ?? ''].join(' '),
+    installable: false,
+    installNote: '这条来自 WorkBuddy 在线技能市场（SkillHub），本插件只读展示。请在 WorkBuddy 里搜索该技能名安装。',
   }
 }
 
@@ -513,6 +569,8 @@ export interface AggregateDeps {
   readonly skillSnapshot?: string
   /** Path of the Chinese overrides for that snapshot. */
   readonly skillTranslation?: string
+  /** WorkBuddy's online skill market (SkillHub); absent disables cloud search. */
+  readonly cloudSkills?: CloudSkillClient
 }
 
 export class Aggregator {
@@ -575,6 +633,21 @@ export class Aggregator {
           if (seen.has(key)) continue
           seen.add(key)
           merged.push(item)
+        }
+        // WorkBuddy's own market is a different catalogue (SkillHub, ~214k rows),
+        // so it is searched rather than mirrored: only a real query hits it, and
+        // the hits are read-only rows the user installs inside WorkBuddy.
+        const needle = (input.q ?? '').trim()
+        if (needle.length >= 2 && this.deps.cloudSkills !== undefined) {
+          const rows = await this.deps.cloudSkills.search(needle, CLOUD_SKILL_LIMIT)
+          // SkillHub matching is fuzzy, so keep only rows that really contain
+          // the query — otherwise the chip count lies about what is clickable.
+          for (const row of rows.map(cloudSkill).filter(item => matches(item, needle.toLowerCase()))) {
+            const key = row.name.toLowerCase()
+            if (seen.has(key)) continue
+            seen.add(key)
+            merged.push(row)
+          }
         }
         all = merged
         degraded = remote.length === 0

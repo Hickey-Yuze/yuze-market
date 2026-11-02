@@ -314,7 +314,43 @@ await writeFile(
   }),
 )
 
-const aggregator = new Aggregator({ catalog, market: api, expertSnapshot: snapshotPath, skillSnapshot: join(CACHE, 'skills-market.json') })
+const cloudCalls = []
+const fakeCloud = {
+  async search(keyword, limit) {
+    cloudCalls.push({ keyword, limit })
+    if (keyword.toLowerCase() !== '12306') return []
+    return [
+      {
+        id: 'cloud:skill:@fake/12306',
+        slug: '12306',
+        name: '@fake/12306',
+        title: '12306 Train Assistant',
+        description: '12306 查询与订票辅助',
+        version: '0.1.7',
+        installs: 219,
+        source: 'clawhub',
+        author: 'fake',
+      },
+      {
+        id: 'cloud:skill:@fake/other',
+        slug: 'other',
+        name: '@fake/other',
+        title: '别的技能',
+        description: '与关键词无关的内容',
+        installs: 0,
+        source: 'clawhub',
+      },
+    ].slice(0, limit)
+  },
+}
+
+const aggregator = new Aggregator({
+  catalog,
+  market: api,
+  expertSnapshot: snapshotPath,
+  skillSnapshot: join(CACHE, 'skills-market.json'),
+  cloudSkills: fakeCloud,
+})
 
 const routes = []
 const dispose = mountUnifiedRoutes(
@@ -371,6 +407,31 @@ try {
     check('远程条目带来源标记', remote?.origin === 'remote', remote?.origin)
     check('分类来自合并结果', body.categories.length >= 1, JSON.stringify(body.categories))
     check('目录条目有 artUrl', body.items.filter(item => item.id.startsWith('local:skill:')).every(item => typeof item.artUrl === 'string'))
+  }
+
+  console.log('\n1b. 云端技能市场（SkillHub）只按关键词搜索')
+  {
+    cloudCalls.length = 0
+    const plain = await get('/items?tab=skill&pageSize=100')
+    check('无关键词时不打云端市场', !plain.body.items.some(item => item.id.startsWith('cloud:')), cloudCalls.length)
+    check('无关键词时一次都没调用', cloudCalls.length === 0, JSON.stringify(cloudCalls))
+
+    const hit = await get('/items?tab=skill&q=12306&pageSize=100')
+    const cloud = hit.body.items.filter(item => item.id.startsWith('cloud:'))
+    check('关键词命中云端技能', cloud.length === 1, cloud.map(item => item.name).join(','))
+    check(
+      '云端行不可安装并写明去 WorkBuddy 装',
+      cloud.every(item => item.installable === false && (item.installNote ?? '').includes('WorkBuddy')),
+      JSON.stringify(cloud[0]),
+    )
+    check('云端行带 badge 与分类', cloud.every(item => item.badge === '云端技能' && item.category === '云端技能'))
+    check('分类 chip 含云端技能', hit.body.categories.some(entry => entry.name === '云端技能' && entry.count === 1), JSON.stringify(hit.body.categories))
+    check('不匹配的云端行被过滤掉', !hit.body.items.some(item => item.name === '@fake/other'))
+    check('云端行的安装量透传', cloud[0]?.usage === 219, cloud[0]?.usage)
+
+    const short = await get('/items?tab=skill&q=a&pageSize=5')
+    check('单字符关键词不触发云端查询', cloudCalls.length === 1, JSON.stringify(cloudCalls))
+    check('单字符关键词照常返回本地结果', short.status === 200 && short.body.items.length > 0, short.body.items.length)
   }
 
   console.log('\n2. 专家 / 连接器 / 插件 tab')

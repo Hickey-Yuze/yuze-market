@@ -12,7 +12,7 @@ QuWork 的技能与插件、WorkBuddy 的专家与连接器，原本分散在四
 
 | 板块 | 数据来源 | 规模 |
 |---|---|---|
-| 技能 | WorkBuddy 本地插件市场的 `skills/` + QuWork 技能市场 | 1 400+ |
+| 技能 | WorkBuddy 本地插件市场的 `skills/` + QuWork 技能市场 + WorkBuddy 在线市场（SkillHub，按关键词搜索） | 1 500+ 本地 / 21 万+ 云端 |
 | 专家 | WorkBuddy 在线专家市场快照 | 26 900+ |
 | 连接器 | WorkBuddy 官方连接器市场（MCP） | 500 |
 | 插件 | QuWork DSH 插件市场 | 36 |
@@ -27,6 +27,7 @@ QuWork 的技能与插件、WorkBuddy 的专家与连接器，原本分散在四
 - **手动安装**：技能/专家支持目录或 zip，连接器支持粘贴 `mcp.json`，插件支持包名 / tgz / 目录。
 - **连接器 OAuth**：授权码 + PKCE 全流程在插件内完成（本机回调 `127.0.0.1:17321`），token 写入 profile 的 MCP headers 并在过期后自动续期。
 - **连接器 Hub**：向宿主的「连接器」面板注册一行市场标识 + 每个已安装 MCP 单独一行（图标、中文名、连接状态、启停开关）。
+- **云端技能搜索**：技能页输入两个字符以上时，并发查 WorkBuddy 自己的在线市场（SkillHub，21 万+ 条），命中行标「云端技能」、带安装量，只读展示并提示在 WorkBuddy 内安装；不输入关键词不会发出任何云端请求。
 
 ## 安装
 
@@ -59,10 +60,10 @@ pnpm add "https://github.com/Hickey-Yuze/yuze-market/releases/latest/download/yu
 
 | 快照 | 生成命令 | 说明 |
 |---|---|---|
-| `catalog.json` | 外部生成 | 连接器 + 部分技能，从 WorkBuddy 官方市场包解析（生成脚本不在本仓库） |
+| `catalog.json` | `pnpm build:catalog` | 连接器，扫描 WorkBuddy 官方市场包解析 `mcp.json` / 图标，并为 `/art` 建目录联接 |
 | `skills-market.json` | `pnpm sync:skills` | 扫描 WorkBuddy 本地插件市场，秒级，不需要登录 |
 | `experts-market.json` | `pnpm sync:experts` | 通过 WorkBuddy 自带 CDP 端口分页拉取在线专家市场（15–20 分钟） |
-| `skills-zh.json` | `pnpm merge:zh` | 技能标题/描述的中文覆盖，缺失时回退英文 |
+| `skills-zh.json` | `pnpm merge:zh` | 技能标题/描述的中文覆盖，缺失时回退英文；改动后按 mtime 热加载，无需重启 |
 
 专家与技能之外的板块在快照缺失时会回退到内置数据源，不会白屏。
 
@@ -93,7 +94,7 @@ pnpm check         # 构建 + 类型 + 包契约 + 客户端 loader + OAuth + AP
 ## 已知限制
 
 - 云端专家的 zip 走签名地址（约 24 小时有效），过期后需重跑 `pnpm sync:experts` 才能继续安装。
-- 上游有十余条技能描述本身是 YAML 占位符（`|` 或 `>`），插件按原样展示，不编造内容。
+- 云端技能（SkillHub）只读展示：安装要在 WorkBuddy 内完成，插件不替它触发安装流程。
 - 技能标题来自上游，部分是英文专名（如 `pdf`、`3-statements`），中文说明在其后。
 - 连接器 id 前缀仍为历史值 `mcp-wbm-`，仅影响配置文件内的标识，不影响显示。
 

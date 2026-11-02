@@ -170,7 +170,7 @@ export function Card(props: CardProps): JSX.Element {
             </button>
           ) : (
             <span className="qym-tagType" data-tone="off">
-              不可安装
+              {item.badge === '云端技能' ? '需在 WorkBuddy 安装' : '不可安装'}
             </span>
           )}
         </div>

@@ -344,7 +344,7 @@ function buildCategories(items: readonly MarketItem[], kind: MarketKind): Market
 }
 
 /** Human label for a WorkBuddy connector's MCP transport. */
-function transportLabel(transport: string | undefined): string {
+export function transportLabel(transport: string | undefined): string {
   if (transport === 'streamable-http') return '远程 MCP'
   if (transport === 'stdio') return '本机 MCP'
   // These two are not installable, so they get their own buckets instead of
