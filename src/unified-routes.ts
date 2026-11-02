@@ -122,6 +122,22 @@ export function mountUnifiedRoutes(register: (route: Route) => () => void, deps:
           return
         }
         const local = parseLocalId(id)
+        if (id.startsWith('cloud:skill:')) {
+          // Cloud rows keep their icon on SkillHub; the proxy caches it locally
+          // so the panel never hotlinks an outside host.
+          const art = await deps.aggregator.cloudArt(id, deps.cacheRoot)
+          if (art.kind === 'bytes' && art.bytes !== undefined) {
+            response.writeHead(200, {
+              'content-type': art.contentType ?? 'application/octet-stream',
+              'cache-control': 'public, max-age=86400',
+              'x-content-type-options': 'nosniff',
+            })
+            response.end(art.bytes)
+            return
+          }
+          sendJson(response, 404, { error: 'no-art' })
+          return
+        }
         if (local === undefined) {
           // Remote entries have no local artwork yet; the panel falls back to an
           // emoji/initial tile rather than requesting a file that cannot exist.
@@ -400,6 +416,30 @@ async function installById(
       return { ok: false, kind: local.kind, target: id, code: 'not-found', message: '目录里没有这个条目' }
     }
     const result = await installItem(item, installDeps)
+    await recordReceipt(deps.receiptDir, result)
+    return result
+  }
+
+  // `cloud:skill:<@namespace/slug>` — a SkillHub row; the row cache from the
+  // last search is the only thing that turns the id back into an entry.
+  if (id.startsWith('cloud:skill:')) {
+    const item = await deps.aggregator.resolve(id)
+    if (item === undefined) {
+      return { ok: false, kind: 'skill', target: id, code: 'not-found', message: '云端技能不在本次搜索结果里，请重新搜索后再装' }
+    }
+    const result = await installItem(
+      {
+        kind: 'skill',
+        id: item.id,
+        name: item.name,
+        title: item.title,
+        description: item.description,
+        tags: item.tags,
+        installable: item.installable,
+        ...(item.version === undefined ? {} : { version: item.version }),
+      },
+      installDeps,
+    )
     await recordReceipt(deps.receiptDir, result)
     return result
   }

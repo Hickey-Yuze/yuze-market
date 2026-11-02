@@ -343,6 +343,31 @@ const fakeCloud = {
       },
     ].slice(0, limit)
   },
+  async browse(page, size) {
+    cloudCalls.push({ browse: page, size })
+    const rows = [
+      {
+        id: 'cloud:skill:@fake/browse-1',
+        slug: 'browse-1',
+        name: '@fake/browse-1',
+        title: '热门的云端技能',
+        description: '按安装量排的云端技能',
+        installs: 8975,
+        iconUrl: 'https://cloudcache.tencent-cloud.com/qcloud/ui/static/other_example.png',
+        source: 'clawhub',
+      },
+      {
+        id: 'cloud:skill:@fake/browse-2',
+        slug: 'browse-2',
+        name: '@fake/browse-2',
+        title: 'Pdf Extract',
+        description: '解析 PDF',
+        installs: 43,
+        source: 'clawhub',
+      },
+    ].slice(0, size)
+    return { rows, total: 214808 }
+  },
 }
 
 const aggregator = new Aggregator({
@@ -414,8 +439,15 @@ try {
   {
     cloudCalls.length = 0
     const plain = await get('/items?tab=skill&pageSize=100')
-    check('无关键词时不打云端市场', !plain.body.items.some(item => item.id.startsWith('cloud:')), cloudCalls.length)
-    check('无关键词时一次都没调用', cloudCalls.length === 0, JSON.stringify(cloudCalls))
+    check('无关键词时不混入云端行', !plain.body.items.some(item => item.id.startsWith('cloud:')), plain.body.items.length)
+    check(
+      '无关键词时不发云端搜索（总量只探一次并缓存）',
+      cloudCalls.filter(call => call.keyword !== undefined).length === 0 &&
+        cloudCalls.filter(call => call.browse !== undefined).length <= 1,
+      JSON.stringify(cloudCalls),
+    )
+    const cloudChip = plain.body.categories.find(entry => entry.name === '云端技能')
+    check('云端技能 chip 常驻并带市场总量', cloudChip?.count === 214808, JSON.stringify(cloudChip))
 
     const hit = await get('/items?tab=skill&q=12306&pageSize=100')
     const cloud = hit.body.items.filter(item => item.id.startsWith('cloud:'))
@@ -431,8 +463,24 @@ try {
     check('云端行的安装量透传', cloud[0]?.usage === 219, cloud[0]?.usage)
 
     const short = await get('/items?tab=skill&q=a&pageSize=5')
-    check('单字符关键词不触发云端查询', cloudCalls.length === 1, JSON.stringify(cloudCalls))
+    check(
+      '单字符关键词不触发云端搜索',
+      cloudCalls.filter(call => call.keyword !== undefined).length === 1,
+      JSON.stringify(cloudCalls),
+    )
     check('单字符关键词照常返回本地结果', short.status === 200 && short.body.items.length > 0, short.body.items.length)
+
+    // Browsing: the 云端技能 chip pages straight off the market.
+    cloudCalls.length = 0
+    const browse = await get('/items?tab=skill&category=%E4%BA%91%E7%AB%AF%E6%8A%80%E8%83%BD&page=1&pageSize=60')
+    check('云端技能可整页浏览', browse.body.items.length === 2, browse.body.items.map(item => item.name).join(','))
+    check('浏览行带市场总量与 hasMore', browse.body.total === 214808 && browse.body.hasMore === true, JSON.stringify({ total: browse.body.total, hasMore: browse.body.hasMore }))
+    check('浏览请求走 browse 而不是 search', cloudCalls.every(call => call.browse !== undefined), JSON.stringify(cloudCalls))
+    check(
+      '带图标的云端行给出本机 art 地址',
+      browse.body.items.find(item => item.name === 'browse-1')?.artUrl?.includes('/api/yuze-market/art?id=') === true,
+      browse.body.items.map(item => `${item.name}:${item.artUrl ?? '-'}`).join(' '),
+    )
   }
 
   console.log('\n1c. 云端技能安装（下载 zip → 解包到技能目录）')

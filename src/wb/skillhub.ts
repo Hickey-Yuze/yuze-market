@@ -32,6 +32,8 @@ export interface CloudSkillRow {
 export interface CloudSkillClient {
   /** Up to `limit` skills matching `keyword`; empty when offline or unknown. */
   search(keyword: string, limit: number): Promise<readonly CloudSkillRow[]>
+  /** One page of the whole market plus its total size; empty when offline. */
+  browse(page: number, size: number): Promise<{ readonly rows: readonly CloudSkillRow[]; readonly total: number }>
 }
 
 const TTL_MS = 5 * 60_000
@@ -102,6 +104,28 @@ export function createCloudSkillClient(
   const endpoint = options.endpoint ?? DEFAULT_ENDPOINT
   const timeoutMs = options.timeoutMs ?? 8000
   const cache = new Map<string, { at: number; rows: readonly CloudSkillRow[] }>()
+  const pageCache = new Map<string, { at: number; rows: readonly CloudSkillRow[]; total: number }>()
+
+  const request = async (url: string): Promise<{ rows: readonly CloudSkillRow[]; total: number } | undefined> => {
+    try {
+      const response = await fetch(url, {
+        signal: AbortSignal.timeout(timeoutMs),
+        headers: { accept: 'application/json' },
+      })
+      if (!response.ok) return undefined
+      const payload = (await response.json()) as {
+        data?: { skills?: readonly unknown[]; total?: number }
+      }
+      const rows = (payload.data?.skills ?? [])
+        .map(parseRow)
+        .filter((row): row is CloudSkillRow => row !== undefined)
+      const total = typeof payload.data?.total === 'number' ? payload.data.total : rows.length
+      return { rows, total }
+    } catch {
+      // Offline, DNS, timeout: the caller falls back to whatever it cached.
+      return undefined
+    }
+  }
 
   return {
     async search(keyword: string, limit: number): Promise<readonly CloudSkillRow[]> {
@@ -112,24 +136,26 @@ export function createCloudSkillClient(
       if (cached !== undefined && Date.now() - cached.at < TTL_MS) return cached.rows
 
       const size = Math.min(50, Math.max(1, limit))
-      const url = `${endpoint}?page=1&pageSize=${size}&keyword=${encodeURIComponent(needle)}`
-      try {
-        const response = await fetch(url, {
-          signal: AbortSignal.timeout(timeoutMs),
-          headers: { accept: 'application/json' },
-        })
-        if (!response.ok) return cached?.rows ?? []
-        const payload = (await response.json()) as { data?: { skills?: readonly unknown[] } }
-        const rows = (payload.data?.skills ?? [])
-          .map(parseRow)
-          .filter((row): row is CloudSkillRow => row !== undefined)
-          .slice(0, size)
-        cache.set(key, { at: Date.now(), rows })
-        return rows
-      } catch {
-        // Offline, DNS, timeout: keep whatever this keyword returned last time.
-        return cached?.rows ?? []
+      const answer = await request(`${endpoint}?page=1&pageSize=${size}&keyword=${encodeURIComponent(needle)}`)
+      if (answer === undefined) return cached?.rows ?? []
+      const rows = answer.rows.slice(0, size)
+      cache.set(key, { at: Date.now(), rows })
+      return rows
+    },
+
+    async browse(page: number, size: number): Promise<{ readonly rows: readonly CloudSkillRow[]; readonly total: number }> {
+      const wanted = Math.min(60, Math.max(1, size))
+      const index = Math.max(1, page)
+      const key = `${index}:${wanted}`
+      const cached = pageCache.get(key)
+      if (cached !== undefined && Date.now() - cached.at < TTL_MS) {
+        return { rows: cached.rows, total: cached.total }
       }
+      const answer = await request(`${endpoint}?page=${index}&pageSize=${wanted}&sort=installs`)
+      if (answer === undefined) return { rows: cached?.rows ?? [], total: cached?.total ?? 0 }
+      const rows = answer.rows.slice(0, wanted)
+      pageCache.set(key, { at: Date.now(), rows, total: answer.total })
+      return { rows, total: answer.total }
     },
   }
 }

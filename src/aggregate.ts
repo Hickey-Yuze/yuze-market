@@ -13,8 +13,11 @@
  * an install without the client passing a URL back to the Host.
  */
 
-import { readFile, stat } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 
+import type { ArtResult } from './art.js'
 import type { MarketApiClient } from './market-api.js'
 import type { MarketPlugin, MarketSkill } from './shared/types.js'
 import { transportLabel, type MarketCatalog } from './wb/catalog.js'
@@ -84,6 +87,8 @@ const REMOTE_PAGE_SIZE = 200
 const REMOTE_MAX_PAGES = 12
 /** Cloud skill hits per search: enough to be useful, few enough to stay fast. */
 const CLOUD_SKILL_LIMIT = 12
+/** Chip that switches the skill tab over to the cloud market. */
+export const CLOUD_CATEGORY = '云端技能'
 
 interface RemoteCache<T> {
   at: number
@@ -503,12 +508,69 @@ function cloudSkill(row: CloudSkillRow): UnifiedItem {
     ...(row.version === undefined ? {} : { version: row.version }),
     ...(row.author === undefined ? {} : { author: row.author }),
     tags: ['云端', ...(row.source === undefined ? [] : [row.source])],
-    category: '云端技能',
-    badge: '云端技能',
+    category: CLOUD_CATEGORY,
+    badge: CLOUD_CATEGORY,
+    ...(row.iconUrl === undefined ? {} : { artUrl: artUrlFor(row.id) }),
     ...(row.installs === undefined ? {} : { usage: row.installs }),
     search: [row.title, row.description, row.source ?? '', row.author ?? ''].join(' '),
     installable: true,
     installNote: '来自 WorkBuddy 在线技能市场（SkillHub），安装时会从 SkillHub 下载技能包并解包到本机技能目录。',
+  }
+}
+
+/** Icon hosts SkillHub actually uses; anything else is not proxied. */
+const ART_HOSTS = new Set([
+  'cloudcache.tencent-cloud.com',
+  'skillhub-1388575217.cos.accelerate.myqcloud.com',
+  'skillhub-1388575217.cos.ap-guangzhou.myqcloud.com',
+  'openplatform-cdn.codebuddy.cn',
+  'api.skillhub.cn',
+  'raw.githubusercontent.com',
+])
+
+function isAllowedArtHost(raw: string): boolean {
+  try {
+    const parsed = new URL(raw)
+    return parsed.protocol === 'https:' && ART_HOSTS.has(parsed.hostname)
+  } catch {
+    return false
+  }
+}
+
+const ART_TYPES: Readonly<Record<string, string>> = {
+  png: 'image/png',
+  svg: 'image/svg+xml',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+}
+
+/** Download one remote icon once and keep it beside the other market caches. */
+async function fetchArtBytes(url: string, cacheRoot: string): Promise<ArtResult> {
+  const extension = (new URL(url).pathname.split('.').pop() ?? '').toLowerCase()
+  const format = ART_TYPES[extension] === undefined ? 'png' : extension
+  const directory = join(cacheRoot, 'cloud-icons')
+  const target = join(directory, `${createHash('sha1').update(url).digest('hex')}.${format}`)
+  try {
+    const info = await stat(target)
+    if (info.isFile() && info.size > 0) {
+      return { kind: 'bytes', bytes: await readFile(target), contentType: ART_TYPES[format] }
+    }
+  } catch {
+    // not cached yet
+  }
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(8000) })
+    if (!response.ok) return { kind: 'none' }
+    const type = response.headers.get('content-type') ?? ''
+    if (!type.startsWith('image/')) return { kind: 'none' }
+    const bytes = Buffer.from(await response.arrayBuffer())
+    if (bytes.length === 0 || bytes.length > 512 * 1024) return { kind: 'none' }
+    await mkdir(directory, { recursive: true })
+    await writeFile(target, bytes)
+    return { kind: 'bytes', bytes, contentType: ART_TYPES[format] ?? type }
+  } catch {
+    return { kind: 'none' }
   }
 }
 
@@ -578,6 +640,14 @@ export class Aggregator {
   private readonly plugins: RemotePlugins
   private readonly marketExperts: MarketExperts | undefined
   private readonly localSkills: LocalSkills | undefined
+  /** Rows from the last cloud searches, so install/art can resolve them by id. */
+  private cloudRows = new Map<string, CloudSkillRow>()
+  /** Ids already shown while paging the cloud market, to hide upstream repeats. */
+  private cloudSeen = new Set<string>()
+  /** Next upstream SkillHub page to read; upstream pages overlap, ours do not. */
+  private cloudCursor = 1
+  private cloudTotal: number | undefined
+  private cloudTotalAt = 0
 
   constructor(private readonly deps: AggregateDeps) {
     this.skills = new RemoteSkills(deps.market)
@@ -618,6 +688,13 @@ export class Aggregator {
 
     switch (input.tab) {
       case 'skill': {
+        const wantedCategory = input.category?.trim()
+        const needle = (input.q ?? '').trim()
+        // Browsing the cloud market is a different list entirely: it is paged
+        // straight off SkillHub instead of being merged into the local rows.
+        if (wantedCategory === CLOUD_CATEGORY && this.deps.cloudSkills !== undefined) {
+          return await this.listCloud(page, pageSize, needle)
+        }
         const [remote, local, packaged] = await Promise.all([
           this.skills.all(),
           this.localOf('skill'),
@@ -634,12 +711,12 @@ export class Aggregator {
           seen.add(key)
           merged.push(item)
         }
-        // WorkBuddy's own market is a different catalogue (SkillHub, ~214k rows),
-        // so it is searched rather than mirrored: only a real query hits it, and
-        // the hits are read-only rows the user installs inside WorkBuddy.
-        const needle = (input.q ?? '').trim()
+        // WorkBuddy's own market is a different catalogue (SkillHub, ~215k rows),
+        // so it is not mirrored: only a real query hits it, and the hits land
+        // alongside the local rows.
         if (needle.length >= 2 && this.deps.cloudSkills !== undefined) {
           const rows = await this.deps.cloudSkills.search(needle, CLOUD_SKILL_LIMIT)
+          this.rememberCloudRows(rows)
           // SkillHub matching is fuzzy, so keep only rows that really contain
           // the query — otherwise the chip count lies about what is clickable.
           for (const row of rows.map(cloudSkill).filter(item => matches(item, needle.toLowerCase()))) {
@@ -699,9 +776,16 @@ export class Aggregator {
           : filtered
 
     const start = (page - 1) * pageSize
+    const categories = categoriesOf(all)
+    // The cloud market is reachable from the chip bar even before a search: the
+    // count is the market size, fetched once and cached.
+    const cloudEntry =
+      input.tab === 'skill' && this.deps.cloudSkills !== undefined && !categories.some(entry => entry.name === CLOUD_CATEGORY)
+        ? [{ name: CLOUD_CATEGORY, count: await this.cloudCount() }]
+        : []
     return {
       items: ordered.slice(start, start + pageSize),
-      categories: categoriesOf(all),
+      categories: [...cloudEntry, ...categories],
       total: ordered.length,
       page,
       pageSize,
@@ -711,8 +795,106 @@ export class Aggregator {
     }
   }
 
+  /** One page of the cloud market (or of a cloud search), straight from SkillHub. */
+  private async listCloud(page: number, pageSize: number, needle: string): Promise<UnifiedList> {
+    const client = this.deps.cloudSkills
+    if (client === undefined) {
+      return { items: [], categories: [], total: 0, page, pageSize, hasMore: false }
+    }
+    if (needle.length >= 2) {
+      const rows = await client.search(needle, CLOUD_SKILL_LIMIT)
+      this.rememberCloudRows(rows)
+      const items = rows.map(cloudSkill).filter(item => matches(item, needle.toLowerCase()))
+      return {
+        items,
+        categories: [{ name: CLOUD_CATEGORY, count: items.length }],
+        total: items.length,
+        page: 1,
+        pageSize,
+        hasMore: false,
+      }
+    }
+    // SkillHub's paging is not stable (hundreds of rows share installs=0), so
+    // adjacent upstream pages overlap by ~40%. Walk our own cursor and keep
+    // fetching until one UI page is actually full of rows the user has not seen.
+    if (page <= 1) {
+      this.cloudSeen.clear()
+      this.cloudCursor = 1
+    }
+    const fresh: CloudSkillRow[] = []
+    let total = this.cloudTotal ?? 0
+    for (let attempt = 0; attempt < 4 && fresh.length < pageSize; attempt++) {
+      const answer = await client.browse(this.cloudCursor, pageSize)
+      this.cloudCursor++
+      this.rememberCloudRows(answer.rows)
+      if (answer.total > 0) {
+        total = answer.total
+        this.cloudTotal = answer.total
+        this.cloudTotalAt = Date.now()
+      }
+      if (answer.rows.length === 0) break
+      for (const row of answer.rows) {
+        if (this.cloudSeen.has(row.id)) continue
+        this.cloudSeen.add(row.id)
+        fresh.push(row)
+      }
+    }
+    if (this.cloudSeen.size > 5000) this.cloudSeen.clear()
+    // A final over-filled attempt is trimmed; the dropped rows stay unseen so the
+    // next page picks them up again.
+    const shown = fresh.slice(0, pageSize)
+    for (const row of fresh.slice(pageSize)) this.cloudSeen.delete(row.id)
+    return {
+      items: shown.map(cloudSkill),
+      categories: [{ name: CLOUD_CATEGORY, count: total }],
+      total,
+      page,
+      pageSize,
+      hasMore: this.cloudCursor * pageSize <= total,
+      ...(shown.length === 0 ? { degraded: true } : {}),
+    }
+  }
+
+  /** Keep the last cloud rows addressable: install and artwork resolve by id. */
+  private rememberCloudRows(rows: readonly CloudSkillRow[]): void {
+    for (const row of rows) {
+      this.cloudRows.delete(row.id)
+      this.cloudRows.set(row.id, row)
+    }
+    while (this.cloudRows.size > 800) {
+      const oldest = this.cloudRows.keys().next().value
+      if (oldest === undefined) break
+      this.cloudRows.delete(oldest)
+    }
+  }
+
+  /** Market size, cached for a while so the chip can show a number. */
+  private async cloudCount(): Promise<number> {
+    if (this.cloudTotal !== undefined && Date.now() - this.cloudTotalAt < 10 * 60_000) return this.cloudTotal
+    const client = this.deps.cloudSkills
+    if (client === undefined) return 0
+    const { rows, total } = await client.browse(1, 1)
+    this.rememberCloudRows(rows)
+    if (total > 0) {
+      this.cloudTotal = total
+      this.cloudTotalAt = Date.now()
+    }
+    return this.cloudTotal ?? 0
+  }
+
+  /** Artwork for a cloud row: its SkillHub icon, proxied and cached on disk. */
+  async cloudArt(id: string, cacheRoot: string): Promise<ArtResult> {
+    const icon = this.cloudRows.get(id)?.iconUrl
+    if (icon === undefined || !isAllowedArtHost(icon)) return { kind: 'none' }
+    return await fetchArtBytes(icon, cacheRoot)
+  }
+
   /** Resolve one item for an install or an artwork request. */
   async resolve(id: string): Promise<UnifiedItem | undefined> {
+    if (id.startsWith('cloud:skill:')) {
+      const row = this.cloudRows.get(id)
+      return row === undefined ? undefined : cloudSkill(row)
+    }
     const local = parseLocalId(id)
     if (local !== undefined) {
       const item = await this.deps.catalog.find(local.kind, local.catalogId)
