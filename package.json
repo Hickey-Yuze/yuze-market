@@ -50,6 +50,7 @@
     "verify:ui": "tsc -p tsconfig.domtest.json && node scripts/verify-ui.mjs",
     "sync:experts": "node scripts/sync-workbuddy-experts.mjs",
     "sync:skills": "node scripts/sync-workbuddy-skills.mjs",
+    "build:catalog": "node scripts/build-catalog.mjs",
     "merge:zh": "node scripts/merge-skill-translations.mjs"
   },
   "dependencies": {
