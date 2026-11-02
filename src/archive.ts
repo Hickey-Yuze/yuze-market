@@ -76,7 +76,11 @@ export interface DownloadedArchive {
 }
 
 /** Download an https archive with size and timeout ceilings. */
-export async function downloadArchive(url: string, timeoutMs = 120_000): Promise<DownloadedArchive> {
+export async function downloadArchive(
+  url: string,
+  timeoutMs = 120_000,
+  options: { readonly redirect?: 'error' | 'follow' | 'manual' } = {},
+): Promise<DownloadedArchive> {
   let parsed: URL
   try {
     parsed = new URL(url)
@@ -94,7 +98,7 @@ export async function downloadArchive(url: string, timeoutMs = 120_000): Promise
   try {
     const response = await fetch(parsed.href, {
       signal: controller.signal,
-      redirect: 'error',
+      redirect: options.redirect ?? 'error',
     })
     if (!response.ok || response.body === null) {
       throw new ArchiveError('download-failed', `下载失败（${response.status}）`)

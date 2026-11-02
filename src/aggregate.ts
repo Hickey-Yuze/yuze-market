@@ -507,8 +507,8 @@ function cloudSkill(row: CloudSkillRow): UnifiedItem {
     badge: '云端技能',
     ...(row.installs === undefined ? {} : { usage: row.installs }),
     search: [row.title, row.description, row.source ?? '', row.author ?? ''].join(' '),
-    installable: false,
-    installNote: '这条来自 WorkBuddy 在线技能市场（SkillHub），本插件只读展示。请在 WorkBuddy 里搜索该技能名安装。',
+    installable: true,
+    installNote: '来自 WorkBuddy 在线技能市场（SkillHub），安装时会从 SkillHub 下载技能包并解包到本机技能目录。',
   }
 }
 

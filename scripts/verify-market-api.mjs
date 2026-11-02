@@ -23,6 +23,7 @@ import { installMarketExpert } from '../scratch/server-out/market-expert-install
 import { MarketApiClient } from '../scratch/server-out/market-api.js'
 import { MarketCatalog } from '../scratch/server-out/wb/catalog.js'
 import { mountUnifiedRoutes } from '../scratch/server-out/unified-routes.js'
+import { installItem } from '../scratch/server-out/wb/install.js'
 import { writeZip } from './lib/minizip.mjs'
 import { downloadExpertSnapshot, expertSnapshotProgress } from '../scratch/server-out/snapshot.js'
 import { gzipSync } from 'node:zlib'
@@ -420,8 +421,8 @@ try {
     const cloud = hit.body.items.filter(item => item.id.startsWith('cloud:'))
     check('关键词命中云端技能', cloud.length === 1, cloud.map(item => item.name).join(','))
     check(
-      '云端行不可安装并写明去 WorkBuddy 装',
-      cloud.every(item => item.installable === false && (item.installNote ?? '').includes('WorkBuddy')),
+      '云端行可安装并写明来源',
+      cloud.every(item => item.installable === true && (item.installNote ?? '').includes('SkillHub')),
       JSON.stringify(cloud[0]),
     )
     check('云端行带 badge 与分类', cloud.every(item => item.badge === '云端技能' && item.category === '云端技能'))
@@ -432,6 +433,53 @@ try {
     const short = await get('/items?tab=skill&q=a&pageSize=5')
     check('单字符关键词不触发云端查询', cloudCalls.length === 1, JSON.stringify(cloudCalls))
     check('单字符关键词照常返回本地结果', short.status === 200 && short.body.items.length > 0, short.body.items.length)
+  }
+
+  console.log('\n1c. 云端技能安装（下载 zip → 解包到技能目录）')
+  {
+    const zipPath = join(HOME, 'cloud-skill.zip')
+    await writeZip(zipPath, [
+      { name: 'SKILL.md', data: '---\nname: flat\n---\nflat copy' },
+      { name: '12306-train-assistant/SKILL.md', data: '---\nname: 12306-train-assistant\ndescription: 查票\n---\n# 12306' },
+      { name: '12306-train-assistant/scripts/run.py', data: 'print("hi")\n' },
+    ])
+    const cloudRoot = join(HOME, 'cloud-skills')
+
+    try {
+      const result = await installItem(
+        {
+          kind: 'skill',
+          tab: 'skill',
+          origin: 'remote',
+          id: 'cloud:skill:@fake/12306-train-assistant',
+          name: '12306-train-assistant',
+          title: '12306 Train Assistant',
+          description: '查票',
+          installable: true,
+        },
+        {
+          cacheRoot: CACHE,
+          skillRoot: cloudRoot,
+          profilePath: PATCH,
+          backupDir: join(HOME, 'backups'),
+          cloudArchive: async () => ({ path: zipPath, cleanup: async () => {} }),
+        },
+      )
+      check('云端技能安装成功', result.ok === true, JSON.stringify(result))
+      const installed = join(cloudRoot, '12306-train-assistant')
+      const skillText = await readFile(join(installed, 'SKILL.md'), 'utf8')
+      check('落盘的是包裹目录里的 SKILL.md', skillText.includes('12306') && !skillText.includes('flat copy'), skillText.slice(0, 60))
+      check('附带文件一起落地', (await readFile(join(installed, 'scripts', 'run.py'), 'utf8')).includes('print'), 'run.py')
+      check(
+        '写入归属标记',
+        JSON.parse(await readFile(join(installed, '.workbuddy-market.json'), 'utf8')).id === 'cloud:skill:@fake/12306-train-assistant',
+        'marker',
+      )
+    } catch (error) {
+      check('云端技能安装未抛异常', false, String(error))
+    } finally {
+      await rm(cloudRoot, { recursive: true, force: true })
+    }
   }
 
   console.log('\n2. 专家 / 连接器 / 插件 tab')

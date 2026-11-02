@@ -15,10 +15,13 @@
  * copy so an install is visible to DSH immediately.
  */
 
-import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { basename, join } from 'node:path'
 
+import { downloadArchive, extractZip } from '../archive.js'
 import { installConnectorMcp, type McpDeps } from './mcp-install.js'
+import { cloudSkillDownloadUrl } from './skillhub.js'
 import type { InstallResult, MarketItem } from './types.js'
 
 export interface InstallDeps extends McpDeps {
@@ -26,6 +29,8 @@ export interface InstallDeps extends McpDeps {
   readonly cacheRoot: string
   /** `~/.dsh/skills` — where every installed skill is written. */
   readonly skillRoot: string
+  /** Override the SkillHub download step (tests hand back a local zip). */
+  readonly cloudArchive?: (canonicalName: string) => Promise<{ path: string; cleanup: () => Promise<void> }>
 }
 
 /** Written into every installed directory so the UI can tell what it owns. */
@@ -42,6 +47,11 @@ export async function installItem(item: MarketItem, deps: InstallDeps): Promise<
     }
   }
 
+  // SkillHub rows are not on disk: they are downloaded on demand.
+  if (item.id.startsWith(CLOUD_SKILL_PREFIX)) {
+    return installCloudSkill(item, deps)
+  }
+
   switch (item.kind) {
     case 'expert':
       return installExpert(item, deps)
@@ -50,6 +60,88 @@ export async function installItem(item: MarketItem, deps: InstallDeps): Promise<
     case 'connector':
       return installConnectorMcp(item, deps)
   }
+}
+
+// ---------------------------------------------------------------- cloud skill
+
+const CLOUD_SKILL_PREFIX = 'cloud:skill:'
+
+/** Download one SkillHub skill and unpack it into the DSH skill root. */
+async function installCloudSkill(item: MarketItem, deps: InstallDeps): Promise<InstallResult> {
+  const canonical = item.id.slice(CLOUD_SKILL_PREFIX.length)
+  if (canonical.length === 0) {
+    return { ok: false, kind: 'skill', target: item.id, code: 'missing-source', message: '云端技能缺少标识' }
+  }
+
+  let archive
+  try {
+    // SkillHub hands back a 302 to its CDN, so redirects must be followed here.
+    archive = await (deps.cloudArchive ?? (async (name: string) => {
+      const url = cloudSkillDownloadUrl(name)
+      return downloadArchive(url, 60_000, { redirect: 'follow' })
+    }))(canonical)
+  } catch (cause) {
+    return {
+      ok: false,
+      kind: 'skill',
+      target: item.id,
+      code: 'download-failed',
+      message: `从 SkillHub 下载失败：${(cause as Error).message}`,
+    }
+  }
+
+  const staging = await mkdtemp(join(tmpdir(), 'yuze-cloud-skill-'))
+  try {
+    await extractZip(archive.path, staging)
+    const root = await locateSkillRoot(staging)
+    if (root === undefined) {
+      return {
+        ok: false,
+        kind: 'skill',
+        target: item.id,
+        code: 'no-skill-found',
+        message: '技能包里没有 SKILL.md，可能不是标准技能包',
+      }
+    }
+
+    // The host only accepts kebab-case directory names, and this is also the
+    // name the installed board compares against.
+    const dirName = cloudDirName(item, canonical)
+    const target = join(deps.skillRoot, dirName)
+    await mkdir(deps.skillRoot, { recursive: true })
+    await rm(target, { recursive: true, force: true })
+    await cp(root, target, { recursive: true })
+    await writeMarker(target, item)
+
+    return { ok: true, kind: 'skill', target }
+  } finally {
+    await rm(staging, { recursive: true, force: true }).catch(() => {})
+    await archive.cleanup().catch(() => {})
+  }
+}
+
+/** Find the directory that actually holds SKILL.md. */
+async function locateSkillRoot(extracted: string): Promise<string | undefined> {
+  // SkillHub zips carry both flat copies and one wrapped skill directory; the
+  // wrapped one is the real skill, so prefer it over the flat files.
+  const dirs = await listDirs(extracted)
+  const wrapped: string[] = []
+  for (const dir of dirs) {
+    const candidate = join(extracted, dir)
+    if (await exists(join(candidate, 'SKILL.md'))) wrapped.push(candidate)
+  }
+  if (wrapped.length === 1) return wrapped[0]
+  if (await exists(join(extracted, 'SKILL.md'))) return extracted
+  return wrapped[0]
+}
+
+/** Kebab-case name for the installed directory, from the row or the canonical id. */
+function cloudDirName(item: MarketItem, canonical: string): string {
+  const fromName = skillSegment(item.name)
+  if (fromName !== 'command') return fromName
+  const tail = canonical.slice(canonical.lastIndexOf('/') + 1)
+  const fromSlug = skillSegment(tail)
+  return fromSlug === 'command' ? `cloud-skill-${Date.now()}` : fromSlug
 }
 
 // ---------------------------------------------------------------- expert

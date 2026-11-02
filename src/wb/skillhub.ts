@@ -37,6 +37,17 @@ export interface CloudSkillClient {
 const TTL_MS = 5 * 60_000
 const DEFAULT_ENDPOINT = 'https://api.skillhub.cn/api/skills'
 
+/** Public zip endpoint behind the site's 「下载 Zip 包」 button. */
+const DOWNLOAD_ENDPOINT = 'https://api.skillhub.cn/api/v1/download'
+
+/**
+ * Download URL for one cloud skill. `canonicalName` is the
+ * `@namespace/slug` value carried in the row id.
+ */
+export function cloudSkillDownloadUrl(canonicalName: string): string {
+  return `${DOWNLOAD_ENDPOINT}?slug=${encodeURIComponent(canonicalName)}`
+}
+
 interface Row {
   readonly name?: unknown
   readonly description?: unknown
