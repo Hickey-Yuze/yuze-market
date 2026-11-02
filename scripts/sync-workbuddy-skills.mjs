@@ -39,14 +39,36 @@ async function exists(path) {
 function frontmatter(text, key) {
   const block = /^---\r?\n([\s\S]*?)\r?\n---/u.exec(text)?.[1]
   if (block === undefined) return ''
-  for (const line of block.split(/\r?\n/u)) {
+  const lines = block.split(/\r?\n/u)
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]
     const separator = line.indexOf(':')
     if (separator <= 0) continue
     if (line.slice(0, separator).trim() !== key) continue
-    return line
-      .slice(separator + 1)
-      .trim()
-      .replace(/^["']|["']$/gu, '')
+    const inline = line.slice(separator + 1).trim()
+    // A block scalar (`description: |` / `>`, optionally with +/- chomping) puts
+    // its text on the indented lines below. Reading the indicator as the value
+    // left ~17 skills with a description of literally "|" or ">".
+    const scalar = /^([|>])[+-]?$/u.exec(inline)
+    if (scalar === null) return inline.replace(/^["']|["']$/gu, '')
+    const collected = []
+    let indent
+    for (let next = index + 1; next < lines.length; next += 1) {
+      const raw = lines[next]
+      if (raw.trim().length === 0) {
+        if (indent !== undefined) collected.push('')
+        continue
+      }
+      const lead = raw.length - raw.trimStart().length
+      if (indent === undefined) {
+        if (lead === 0) break
+        indent = lead
+      }
+      if (lead < indent) break
+      collected.push(raw.slice(indent))
+    }
+    // The card shows one line, so fold paragraphs into a single run of text.
+    return collected.join(' ').replace(/\s+/gu, ' ').trim()
   }
   return ''
 }
