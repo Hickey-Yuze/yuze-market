@@ -75,7 +75,7 @@ pnpm typecheck     # 服务端 + 客户端类型检查
 pnpm check         # 构建 + 类型 + 包契约 + 客户端 loader + OAuth + API + UI 全链路
 ```
 
-`pnpm check` 里有 216 项断言，覆盖：
+`pnpm check` 里有 225 项断言，覆盖：
 
 - OAuth 授权码 + PKCE 全流程（含取消、过期、无 refresh token）
 - 市场 API（合并、排序、分页、图标、启停、删除、手动安装）

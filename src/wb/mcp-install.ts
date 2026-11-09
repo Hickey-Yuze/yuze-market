@@ -110,19 +110,18 @@ export async function installConnectorMcp(item: MarketItem, deps: McpDeps): Prom
   }
 
   const lines = text.split('\n')
-  const range = findInsertList(lines)
-  if (range === null) {
-    return {
-      ok: false,
-      kind: 'connector',
-      target: item.id,
-      code: 'no-insert-block',
-      message: 'cordis.patch.yml 里没有 `- insert:` 列表，无法安全写入',
-    }
-  }
+  const found = findInsertList(lines)
+  // A profile written before this plugin (or by hand) has no insert list, and
+  // the loader only accepts new plugin rows inside one — create it instead of
+  // dead-ending on the first connector install.
+  const prepared = found === null ? appendInsertList(lines) : { lines, ...found }
 
-  const block = renderEntry(item, mcp, range.itemIndent)
-  const next = [...lines.slice(0, range.end), ...block, ...lines.slice(range.end)]
+  const block = renderEntry(item, mcp, prepared.itemIndent)
+  const next = [
+    ...prepared.lines.slice(0, prepared.end),
+    ...block,
+    ...prepared.lines.slice(prepared.end),
+  ]
 
   const backup = await backupProfile(deps)
   await writeFile(deps.profilePath, next.join('\n'), 'utf8')
@@ -132,7 +131,11 @@ export async function installConnectorMcp(item: MarketItem, deps: McpDeps): Prom
     kind: 'connector',
     target: id,
     message: `${item.title} 已写入 MCP 配置`,
-    warnings: [restartHint, ...(backup === null ? [] : [`原配置已备份到 ${backup}`])],
+    warnings: [
+      ...(found === null ? ['已在 cordis.patch.yml 末尾创建 `- insert:` 列表'] : []),
+      restartHint,
+      ...(backup === null ? [] : [`原配置已备份到 ${backup}`]),
+    ],
   }
 }
 
@@ -457,6 +460,24 @@ function findInsertList(lines: readonly string[]): InsertList | null {
   }
   if (itemIndent === '') itemIndent = `${baseIndent}    `
   return { end, itemIndent }
+}
+
+interface PreparedInsertList extends InsertList {
+  readonly lines: string[]
+}
+
+/**
+ * Append an empty `- insert:` list to a patch file that has none.
+ *
+ * The loader's patch dialect only accepts new plugin rows inside an insert
+ * list, so the first connector install has to create one; the trailing blank
+ * line keeps the rendered block visually separated from the anchor entry.
+ */
+function appendInsertList(lines: readonly string[]): PreparedInsertList {
+  const next = [...lines]
+  if ((next[next.length - 1] ?? '').trim().length > 0) next.push('')
+  next.push('# Yuze-市场 写入的 MCP 连接器（卸载时整段移除）', '- insert:', '')
+  return { lines: next, end: next.length, itemIndent: '    ' }
 }
 
 interface EntryRange {

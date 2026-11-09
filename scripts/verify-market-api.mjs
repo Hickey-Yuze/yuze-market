@@ -1,4 +1,4 @@
-/**
+﻿/**
  * End-to-end check of the 市场 API (`/api/yuze-market/*`).
  *
  * Builds a throwaway DSH home — one skill, one expert, one installed connector,
@@ -26,6 +26,8 @@ import { mountUnifiedRoutes } from '../scratch/server-out/unified-routes.js'
 import { installItem } from '../scratch/server-out/wb/install.js'
 import { isSkillName, normalizeSkillName } from '../scratch/server-out/skill-name.js'
 import { readManagedEntry } from '../scratch/server-out/managed.js'
+import { installConnectorMcp } from '../scratch/server-out/wb/mcp-install.js'
+
 import { writeZip } from './lib/minizip.mjs'
 import { downloadExpertSnapshot, expertSnapshotProgress } from '../scratch/server-out/snapshot.js'
 import { gzipSync } from 'node:zlib'
@@ -569,6 +571,72 @@ try {
     const bad = await readManagedEntry(root, 'still-bad', true)
     check('不合法调用名标成不可调用', bad?.invocable === false && bad?.callName === undefined, JSON.stringify(bad))
     await rm(root, { recursive: true, force: true })
+  }
+
+  console.log('\n1e. 没有 insert 块时自动创建')
+  {
+    const bare = join(PROFILE, 'no-insert.patch.yml')
+    await writeFile(
+      bare,
+      `# 手写 profile，早期版本没有 insert 列表
+- id: desktop-shell
+  name: dsh-plugin-desktop
+  config:
+    mode: compatibility
+`,
+      'utf8',
+    )
+    const deps = { cacheRoot: CACHE, profilePath: bare, backupDir: join(HOME, 'backups') }
+    const first = await installConnectorMcp(
+      {
+        kind: 'connector',
+        tab: 'connector',
+        origin: 'local',
+        id: 'local:connector:alpha',
+        name: 'alpha',
+        title: 'Alpha 连接器',
+        description: '测试',
+        installable: true,
+        mcp: { serverName: 'alpha', transport: 'streamable-http', url: 'https://alpha.test/mcp' },
+      },
+      deps,
+    )
+    check('缺 insert 块也能装成功', first.ok === true, JSON.stringify(first))
+    check('给出建块提示', (first.warnings ?? []).some(w => w.includes('创建 `- insert:`')), JSON.stringify(first.warnings))
+    const afterFirst = await readFile(bare, 'utf8')
+    check('自动写下 insert 块', /^- insert:$/mu.test(afterFirst), afterFirst.split('\n').slice(-8).join(' | '))
+    check('连接器条目在块内', afterFirst.includes('serverName: alpha'), 'alpha')
+    check('原有条目没被删', afterFirst.includes('id: desktop-shell'), 'desktop-shell')
+
+    const second = await installConnectorMcp(
+      {
+        kind: 'connector',
+        tab: 'connector',
+        origin: 'local',
+        id: 'local:connector:beta',
+        name: 'beta',
+        title: 'Beta 连接器',
+        description: '测试',
+        installable: true,
+        mcp: { serverName: 'beta', transport: 'streamable-http', url: 'https://beta.test/mcp' },
+      },
+      deps,
+    )
+    check('第二个连接器也装得上', second.ok === true, JSON.stringify(second))
+    const afterSecond = await readFile(bare, 'utf8')
+    check('不会重复建块', (afterSecond.match(/^- insert:$/gmu) ?? []).length === 1, (afterSecond.match(/^- insert:$/gmu) ?? []).length)
+    check('两个条目共用一个块', afterSecond.indexOf('serverName: alpha') < afterSecond.indexOf('serverName: beta'), 'order')
+    const headerIndex = afterSecond.split('\n').findIndex(line => /^- insert:$/u.test(line))
+    const tail = afterSecond
+      .split('\n')
+      .slice(headerIndex + 1)
+      .filter(line => line.length > 0)
+    check(
+      '块内两条目缩进一致（4 空格起的列表）',
+      tail.every(line => /^\s{4}/u.test(line)) && tail.filter(line => /^\s{4}- id: /u.test(line)).length === 2,
+      JSON.stringify(tail.map(line => line.slice(0, 12))),
+    )
+    await rm(bare, { force: true })
   }
 
   console.log('\n2. 专家 / 连接器 / 插件 tab')
