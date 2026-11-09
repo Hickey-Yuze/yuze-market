@@ -1,4 +1,4 @@
-﻿/**
+/**
  * End-to-end check of the 市场 API (`/api/yuze-market/*`).
  *
  * Builds a throwaway DSH home — one skill, one expert, one installed connector,
@@ -234,13 +234,48 @@ async function seed() {
     join(packagedSkill, 'SKILL.md'),
     '---\nname: packaged-skill\ndescription: 来自本地市场包的技能\n---\n\n正文\n',
   )
+  // The package icon lives under the WorkBuddy plugin root; a second skill's
+  // icon points outside it to prove the path is re-anchored, not trusted.
+  process.env.WORKBUDDY_HOME = join(HOME, 'workbuddy')
+  const packageIcon = join(
+    HOME,
+    'workbuddy',
+    'plugins',
+    'marketplaces',
+    'official',
+    'pkg',
+    'ai.workbuddy',
+    'assets',
+    'icon.svg',
+  )
+  await mkdir(join(packageIcon, '..'), { recursive: true })
+  await writeFile(packageIcon, '<svg xmlns="http://www.w3.org/2000/svg"><title>package-icon</title></svg>')
+  const outsideIcon = join(HOME, 'outside.png')
+  await writeFile(outsideIcon, Buffer.from([0x89, 0x50, 0x4e, 0x47]))
   await writeFile(
     join(CACHE, 'skills-market.json'),
     JSON.stringify({
       builtAt: new Date().toISOString(),
-      total: 1,
+      total: 2,
       items: [
-        { name: 'packaged-skill', title: 'packaged-skill', description: '来自本地市场包的技能', market: 'official', plugin: 'pkg', dir: packagedSkill },
+        {
+          name: 'packaged-skill',
+          title: 'packaged-skill',
+          description: '来自本地市场包的技能',
+          market: 'official',
+          plugin: 'pkg',
+          dir: packagedSkill,
+          icon: packageIcon,
+        },
+        {
+          name: 'evil-skill',
+          title: 'evil-skill',
+          description: '图标指向包外',
+          market: 'official',
+          plugin: 'pkg',
+          dir: packagedSkill,
+          icon: outsideIcon,
+        },
       ],
     }),
   )
@@ -430,13 +465,19 @@ try {
   {
     const { status, body } = await get('/items?tab=skill&pageSize=100')
     check('HTTP 200', status === 200, status)
-    check('合并后有 3 条（本地市场包 + 目录 + 远程）', body.items.length === 3, body.items.map(i => i.name).join(','))
+    check('合并后有 4 条（市场包 ×2 + 目录 + 远程）', body.items.length === 4, body.items.map(i => i.name).join(','))
     check('本地市场包的技能排在最前', body.items[0].id.startsWith('skillfile:'), body.items[0].id)
-    check('目录条目紧随其后', body.items[1].name === 'alpha', body.items[1]?.name)
+    const alphaAt = body.items.findIndex(item => item.name === 'alpha')
+    check('目录条目排在市场包之后', alphaAt === 2, alphaAt)
     const remote = body.items.find(item => item.name === 'remote-skill')
     check('远程条目带来源标记', remote?.origin === 'remote', remote?.origin)
     check('分类来自合并结果', body.categories.length >= 1, JSON.stringify(body.categories))
     check('目录条目有 artUrl', body.items.filter(item => item.id.startsWith('local:skill:')).every(item => typeof item.artUrl === 'string'))
+    check(
+      '带图标的包内技能给出 art 地址',
+      body.items.find(item => item.name === 'packaged-skill')?.artUrl?.includes('/api/yuze-market/art?id=') === true,
+      body.items.find(item => item.name === 'packaged-skill')?.artUrl,
+    )
   }
 
   console.log('\n1b. 云端技能市场（SkillHub）只按关键词搜索')
@@ -713,6 +754,16 @@ try {
 
     const missing = await fetch(`${base}/art?id=${encodeURIComponent('local:skill:nope')}`)
     check('缺失图标 404', missing.status === 404, missing.status)
+
+    // A skill that ships inside a marketplace package shares the package icon;
+    // the snapshot records its absolute path, which must stay inside the root.
+    const packaged = await fetch(`${base}/art?id=${encodeURIComponent('skillfile:packaged-skill')}`)
+    check('市场包内技能图标 200', packaged.status === 200, packaged.status)
+    check('市场包图标是 svg', (packaged.headers.get('content-type') ?? '').includes('svg'), packaged.headers.get('content-type'))
+    check('市场包图标内容正确', (await packaged.text()).includes('package-icon'), 'svg body')
+
+    const escaped = await fetch(`${base}/art?id=${encodeURIComponent('skillfile:evil-skill')}`)
+    check('包外路径被拒绝', escaped.status === 404, escaped.status)
   }
 
   console.log('\n5. 已安装总览')

@@ -125,17 +125,13 @@ export function mountUnifiedRoutes(register: (route: Route) => () => void, deps:
         if (id.startsWith('cloud:skill:')) {
           // Cloud rows keep their icon on SkillHub; the proxy caches it locally
           // so the panel never hotlinks an outside host.
-          const art = await deps.aggregator.cloudArt(id, deps.cacheRoot)
-          if (art.kind === 'bytes' && art.bytes !== undefined) {
-            response.writeHead(200, {
-              'content-type': art.contentType ?? 'application/octet-stream',
-              'cache-control': 'public, max-age=86400',
-              'x-content-type-options': 'nosniff',
-            })
-            response.end(art.bytes)
-            return
-          }
-          sendJson(response, 404, { error: 'no-art' })
+          sendArt(response, await deps.aggregator.cloudArt(id, deps.cacheRoot))
+          return
+        }
+        if (id.startsWith('skillfile:')) {
+          // A skill that ships inside a marketplace package shares the
+          // package's own icon (`ai.workbuddy/assets/icon.*`).
+          sendArt(response, await deps.aggregator.localSkillArt(id))
           return
         }
         if (local === undefined) {
@@ -150,16 +146,7 @@ export function mountUnifiedRoutes(register: (route: Route) => () => void, deps:
           response.end()
           return
         }
-        if (art.kind === 'bytes' && art.bytes !== undefined) {
-          response.writeHead(200, {
-            'content-type': art.contentType ?? 'application/octet-stream',
-            'cache-control': 'public, max-age=86400',
-            'x-content-type-options': 'nosniff',
-          })
-          response.end(art.bytes)
-          return
-        }
-        sendJson(response, 404, { error: 'no-art' })
+        sendArt(response, art)
         return
       }
 
@@ -538,6 +525,20 @@ function sendJson(response: ServerResponse, status: number, body: unknown): void
     'cache-control': 'no-store',
   })
   response.end(payload)
+}
+
+/** Serve resolved artwork bytes, or a bare 404 the panel turns into a placeholder. */
+function sendArt(response: ServerResponse, art: { kind: string; bytes?: Buffer; contentType?: string }): void {
+  if (art.kind === 'bytes' && art.bytes !== undefined) {
+    response.writeHead(200, {
+      'content-type': art.contentType ?? 'application/octet-stream',
+      'cache-control': 'public, max-age=86400',
+      'x-content-type-options': 'nosniff',
+    })
+    response.end(art.bytes)
+    return
+  }
+  sendJson(response, 404, { error: 'no-art' })
 }
 
 async function readJson(request: IncomingMessage): Promise<Body | null> {

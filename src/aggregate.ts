@@ -17,7 +17,7 @@ import { createHash } from 'node:crypto'
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import type { ArtResult } from './art.js'
+import { packageSkillArt, type ArtResult } from './art.js'
 import type { MarketApiClient } from './market-api.js'
 import type { MarketPlugin, MarketSkill } from './shared/types.js'
 import { transportLabel, type MarketCatalog } from './wb/catalog.js'
@@ -265,6 +265,8 @@ export interface RawLocalSkill {
   readonly market?: string
   readonly plugin?: string
   readonly dir?: string
+  /** Absolute icon path inside the marketplace package, when it ships one. */
+  readonly icon?: string
 }
 
 /** Chinese overrides produced by the translation pass, keyed by skill name. */
@@ -370,6 +372,9 @@ function localSkill(raw: RawLocalSkill, zh?: SkillTranslation): UnifiedItem {
     title: title !== undefined && title.length > 0 ? title : name,
     description,
     ...(raw.version === undefined || raw.version.length === 0 ? {} : { version: raw.version }),
+    // Marketplace-packaged skills share their package icon; without this the
+    // whole 连接器套件 group rendered as initial-only tiles.
+    ...(typeof raw.icon === 'string' && raw.icon.length > 0 ? { artUrl: artUrlFor(`skillfile:${name}`) } : {}),
     tags: raw.market === undefined ? [] : [marketLabel(raw.market)],
     category: marketLabel(raw.market),
     installable: true,
@@ -887,6 +892,13 @@ export class Aggregator {
     const icon = this.cloudRows.get(id)?.iconUrl
     if (icon === undefined || !isAllowedArtHost(icon)) return { kind: 'none' }
     return await fetchArtBytes(icon, cacheRoot)
+  }
+
+  /** Artwork for a marketplace-packaged skill row (`skillfile:<name>`). */
+  async localSkillArt(id: string): Promise<ArtResult> {
+    const name = id.startsWith('skillfile:') ? id.slice('skillfile:'.length) : id
+    const raw = await this.localSkills?.byName(name)
+    return await packageSkillArt(raw?.icon)
   }
 
   /** Resolve one item for an install or an artwork request. */

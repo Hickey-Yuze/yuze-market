@@ -16,6 +16,7 @@
  */
 
 import { readFile, stat } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
 
 import type { MarketItem, MarketKind } from './wb/types.js'
@@ -61,8 +62,7 @@ async function readImage(path: string, format?: string): Promise<ArtResult> {
 }
 
 /** A skill icon lives next to the unpacked marketplace bundle, keyed by source slug. */
-async function skillArt(item: MarketItem, cacheRoot: string): Promise<ArtResult> {
-  const bundle = item.zipName ?? item.source
+async function skillArt(item: MarketItem, cacheRoot: string): Promise<ArtResult> {  const bundle = item.zipName ?? item.source
   const slug = item.source ?? item.name
   if (bundle === undefined || slug === undefined) return { kind: 'none' }
 
@@ -119,4 +119,25 @@ export async function resolveArt(
 /** Convenience for the routes: the on-disk bundle root a skill came from. */
 export function skillBundleRoot(cacheRoot: string, zipName: string): string {
   return join(cacheRoot, 'skills', zipName)
+}
+
+/** WorkBuddy's plugin marketplace root — the only place packaged icons may come from. */
+function workbuddyPluginsRoot(): string {
+  const home = process.env.WORKBUDDY_HOME ?? join(homedir(), '.workbuddy')
+  return resolve(home, 'plugins', 'marketplaces')
+}
+
+/**
+ * Icon of a skill that ships inside a marketplace package.
+ *
+ * Such a skill has no per-slug icon of its own: the whole package shares one
+ * `ai.workbuddy/assets/icon.*` (agent-earth's 64 skills, for instance). The
+ * snapshot records that file as an absolute path, so the path is re-anchored to
+ * the marketplace root before anything is read.
+ */
+export async function packageSkillArt(iconPath: string | undefined): Promise<ArtResult> {
+  if (iconPath === undefined || iconPath.length === 0) return { kind: 'none' }
+  const candidate = resolve(iconPath)
+  if (!inside(workbuddyPluginsRoot(), candidate)) return { kind: 'none' }
+  return await readImage(candidate)
 }
