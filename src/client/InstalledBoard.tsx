@@ -156,13 +156,25 @@ export function InstalledBoard(props: InstalledBoardProps): JSX.Element {
               id={`skill:${entry.name}`}
               {...(entry.artUrl === undefined ? {} : { artUrl: entry.artUrl })}
               title={entry.title}
-              subtitle={[entry.name, entry.version === undefined ? '' : `v${entry.version}`]
+              subtitle={[`/${entry.callName ?? entry.name}`, entry.version === undefined ? '' : `v${entry.version}`]
                 .filter(part => part.length > 0)
                 .join(' · ')}
-              badge={<Badge tone={entry.enabled ? 'on' : 'off'}>{entry.enabled ? '已启用' : '已停用'}</Badge>}
+              badge={
+                entry.invocable ? (
+                  <Badge tone={entry.enabled ? 'on' : 'off'}>{entry.enabled ? '已启用' : '已停用'}</Badge>
+                ) : (
+                  <Badge tone="off">调用名不合法</Badge>
+                )
+              }
               actions={
                 <>
-                  <button type="button" className="qym-btn qym-btn--primary" onClick={() => onInvokeSkill(entry)}>
+                  <button
+                    type="button"
+                    className="qym-btn qym-btn--primary"
+                    disabled={!entry.invocable}
+                    title={entry.invocable ? undefined : 'SKILL.md 的 name 不是 kebab-case，宿主不会加载这个技能'}
+                    onClick={() => onInvokeSkill(entry)}
+                  >
                     调用
                   </button>
                   <button

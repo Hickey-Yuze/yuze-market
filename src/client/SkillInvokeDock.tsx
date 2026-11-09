@@ -117,7 +117,9 @@ function DockRow(props: {
           <Avatar size="sm" item={avatarItem(entry)} />
           <span className="qym-skillRowText">
             <span className="qym-skillRowTitle">{entry.title}</span>
-            <span className="qym-skillRowName">/{entry.name}</span>
+            <span className="qym-skillRowName">
+              {entry.invocable ? `/${entry.callName ?? entry.name}` : '调用名不合法，宿主不会加载'}
+            </span>
           </span>
           {selected ? <span className="qym-skillRowSelected">已选</span> : null}
         </button>
@@ -191,8 +193,10 @@ export function SkillInvokeDock(props: SkillInvokeDockProps): JSX.Element {
       setSelected(isSelected ? [] : [entry])
       if (isSelected) {
         setOpen(false)
+      } else if (entry.invocable) {
+        loadDraft(entry.callName ?? entry.name)
       } else {
-        loadDraft(entry.name)
+        setOpen(false)
       }
     },
     [selected, loadDraft],
@@ -334,7 +338,7 @@ export function SkillInvokeDock(props: SkillInvokeDockProps): JSX.Element {
                           entry={entry}
                           selected={selectedNames.has(entry.name)}
                           onSelect={() => toggleSelected(entry)}
-                          onCall={() => invoke(entry.name)}
+                          onCall={() => entry.invocable && invoke(entry.callName ?? entry.name)}
                         />
                       ))}
                     </ul>
@@ -352,7 +356,7 @@ export function SkillInvokeDock(props: SkillInvokeDockProps): JSX.Element {
                           entry={entry}
                           selected={selectedNames.has(entry.name)}
                           onSelect={() => toggleSelected(entry)}
-                          onCall={() => invoke(entry.name)}
+                          onCall={() => entry.invocable && invoke(entry.callName ?? entry.name)}
                         />
                       ))}
                     </ul>

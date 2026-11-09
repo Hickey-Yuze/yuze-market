@@ -20,6 +20,7 @@ import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 
 import { downloadArchive, extractZip } from '../archive.js'
+import { normalizeSkillName } from '../skill-name.js'
 import { installConnectorMcp, type McpDeps } from './mcp-install.js'
 import { cloudSkillDownloadUrl } from './skillhub.js'
 import type { InstallResult, MarketItem } from './types.js'
@@ -111,7 +112,10 @@ async function installCloudSkill(item: MarketItem, deps: InstallDeps): Promise<I
     await mkdir(deps.skillRoot, { recursive: true })
     await rm(target, { recursive: true, force: true })
     await cp(root, target, { recursive: true })
-    await writeMarker(target, item)
+    // SkillHub writes the vendor's title into `name:` (often Chinese), which the
+    // host rejects. Keep the title for display, make the call name legal.
+    const normalized = await normalizeSkillName(target, dirName)
+    await writeMarker(target, { ...item, callName: normalized.name })
 
     return { ok: true, kind: 'skill', target }
   } finally {
@@ -228,12 +232,13 @@ async function installSkill(item: MarketItem, deps: InstallDeps): Promise<Instal
 
 // ---------------------------------------------------------------- helpers
 
-async function writeMarker(target: string, item: MarketItem): Promise<void> {
+async function writeMarker(target: string, item: MarketItem & { readonly callName?: string }): Promise<void> {
   const payload = {
     source: 'yuze-market',
     kind: item.kind,
     id: item.id,
     title: item.title,
+    ...(item.callName === undefined ? {} : { callName: item.callName }),
     installedAt: new Date().toISOString(),
   }
   await writeFile(join(target, MARKER), `${JSON.stringify(payload, null, 2)}\n`, 'utf8').catch(() => {})

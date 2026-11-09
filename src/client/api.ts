@@ -60,6 +60,9 @@ export interface InstalledSkillEntry {
   readonly description: string
   readonly version?: string
   readonly marketId?: string
+  /** Name the host registers (frontmatter `name`); absent when it is invalid. */
+  readonly callName?: string
+  readonly invocable: boolean
   readonly enabled: boolean
   readonly path: string
   readonly installedAt?: string

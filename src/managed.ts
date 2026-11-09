@@ -17,6 +17,8 @@
 import { cp, mkdir, readFile, readdir, rename, rm, stat, writeFile, readlink } from 'node:fs/promises'
 import { join } from 'node:path'
 
+import { isSkillName } from './skill-name.js'
+
 export const SKILL_FILE = 'SKILL.md'
 export const WB_MARKER = '.workbuddy-market.json'
 export const QUWORK_META = '_meta.json'
@@ -31,8 +33,15 @@ export interface ManagedEntry {
   readonly title: string
   readonly description: string
   readonly version?: string
-  /** Catalog id this entry was installed from, when it came from a market. */
+  /** Catalogue id this entry was installed from, when it came from a market. */
   readonly marketId?: string
+  /**
+   * The name the host actually registers: `SKILL.md`'s frontmatter `name`.
+   * It is empty when that value is missing or not kebab-case — the host drops
+   * such a skill, so the panel must not offer to call it.
+   */
+  readonly callName?: string
+  readonly invocable: boolean
   readonly enabled: boolean
   readonly path: string
   readonly installedAt?: string
@@ -104,12 +113,22 @@ export async function readManagedEntry(
   const markerKind = stringOf(wb, 'kind')
   const kind: ManagedKind = markerKind === 'expert' ? 'expert' : 'skill'
 
-  const title =
-    stringOf(wb, 'title') ??
-    stringOf(quwork, 'nameCn') ??
-    stringOf(quwork, 'slug') ??
-    frontmatterField(text, 'name') ??
-    name
+  // The callable name is the frontmatter one; upstream titles (Chinese, spaces)
+  // are display text and the host silently ignores them.
+  const frontmatterName = frontmatterField(text, 'name')
+  const callName = frontmatterName !== undefined && isSkillName(frontmatterName) ? frontmatterName : undefined
+
+  // A title equal to the directory name carries no information — older markers
+  // recorded the slug there — so the first *different* candidate wins.
+  const candidates = [
+    stringOf(wb, 'title'),
+    stringOf(quwork, 'title'),
+    stringOf(quwork, 'nameCn'),
+    frontmatterField(text, 'title'),
+    callName,
+    frontmatterName,
+  ].filter((value): value is string => value !== undefined && value.length > 0)
+  const title = candidates.find(value => value !== name) ?? candidates[0] ?? name
   const description = frontmatterField(text, 'description') ?? ''
   const version = stringOf(wb, 'version') ?? stringOf(quwork, 'version')
 
@@ -120,6 +139,8 @@ export async function readManagedEntry(
     description,
     ...(version === undefined ? {} : { version }),
     ...(stringOf(wb, 'id') === undefined ? {} : { marketId: stringOf(wb, 'id') }),
+    ...(callName === undefined ? {} : { callName }),
+    invocable: callName !== undefined,
     enabled,
     path: directory,
     ...(stringOf(wb, 'installedAt') === undefined ? {} : { installedAt: stringOf(wb, 'installedAt') }),

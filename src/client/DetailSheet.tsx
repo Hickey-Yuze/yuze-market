@@ -191,6 +191,12 @@ export function DetailSheet(props: DetailSheetProps): JSX.Element {
               <div className="qym-factValue">{installed.name}</div>
             </div>
           ) : null}
+          {item.tab === 'skill' ? (
+            <div>
+              <div className="qym-factKey">调用名</div>
+              <div className="qym-factValue">/{installed?.callName ?? item.name}</div>
+            </div>
+          ) : null}
           <div>
             <div className="qym-factKey">标识</div>
             <div className="qym-factValue">{item.name}</div>

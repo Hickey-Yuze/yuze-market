@@ -568,7 +568,7 @@ export function MarketPanel(props: MarketPanelProps): JSX.Element {
             busyId={busyId}
             onToggleSkill={entry => void toggleSkill(entry)}
             onRemoveSkill={entry => void removeSkill(entry)}
-            onInvokeSkill={entry => dispatchInvokeSkill(entry.name)}
+            onInvokeSkill={entry => dispatchInvokeSkill(entry.callName ?? entry.name)}
             onToggleConnector={entry => void toggleConnector(entry)}
             onRemoveConnector={entry => void removeConnector(entry)}
             onTogglePlugin={entry => void togglePlugin(entry)}

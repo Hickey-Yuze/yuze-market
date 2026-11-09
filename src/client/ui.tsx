@@ -84,7 +84,14 @@ export function Card(props: CardProps): JSX.Element {
   const { item, installedAs, installedEnabled, busy, onOpen, onInstall } = props
   const installed = installedAs !== undefined
   const usage = formatUsage(item.usage)
-  const sub = item.name !== item.title ? item.name : (item.category ?? '')
+  // For skills the English name is the *invocation* name (`/travel-cn`), so it is
+  // labelled as such instead of looking like a second title.
+  const sub =
+    item.name !== item.title
+      ? item.tab === 'skill'
+        ? `/${item.name}`
+        : item.name
+      : (item.category ?? '')
   const state = busy ? 'loading' : 'idle'
 
   return (

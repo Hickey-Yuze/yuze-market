@@ -22,6 +22,7 @@ import { cp, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { ArchiveError, downloadArchive, extractZip } from './archive.js'
+import { normalizeSkillName } from './skill-name.js'
 import type { InstallResult, InstalledSkill, MarketSkill } from './shared/types.js'
 
 export const SKILL_FILE = 'SKILL.md'
@@ -242,12 +243,19 @@ export async function installSkill(options: SkillInstallOptions): Promise<SkillI
       dereference: false,
       filter: source => !basename(source).startsWith('.'),
     })
+    // The market name and the callable name differ: upstream often puts a
+    // Chinese title in `name:`, which the host rejects outright. Keep the title
+    // as display text and register a legal kebab-case name.
+    const normalized = await normalizeSkillName(destination, target.name)
+    if (normalized.changed) warnings.push(`技能名已规范为 ${normalized.name}（上游原名不可调用）`)
     await writeFile(
       join(destination, META_FILE),
       JSON.stringify({
         marketplaceId: entry.id,
         slug: entry.name,
         nameCn: entry.nameCn,
+        ...(normalized.title === undefined ? {} : { title: normalized.title }),
+        callName: normalized.name,
         tags: entry.tags,
         categories: entry.categories,
         author: entry.author,

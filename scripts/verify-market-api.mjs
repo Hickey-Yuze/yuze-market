@@ -24,6 +24,8 @@ import { MarketApiClient } from '../scratch/server-out/market-api.js'
 import { MarketCatalog } from '../scratch/server-out/wb/catalog.js'
 import { mountUnifiedRoutes } from '../scratch/server-out/unified-routes.js'
 import { installItem } from '../scratch/server-out/wb/install.js'
+import { isSkillName, normalizeSkillName } from '../scratch/server-out/skill-name.js'
+import { readManagedEntry } from '../scratch/server-out/managed.js'
 import { writeZip } from './lib/minizip.mjs'
 import { downloadExpertSnapshot, expertSnapshotProgress } from '../scratch/server-out/snapshot.js'
 import { gzipSync } from 'node:zlib'
@@ -523,11 +525,50 @@ try {
         JSON.parse(await readFile(join(installed, '.workbuddy-market.json'), 'utf8')).id === 'cloud:skill:@fake/12306-train-assistant',
         'marker',
       )
+      const marker = JSON.parse(await readFile(join(installed, '.workbuddy-market.json'), 'utf8'))
+      check('标记里记下调用名', marker.callName === '12306-train-assistant', JSON.stringify(marker))
     } catch (error) {
       check('云端技能安装未抛异常', false, String(error))
     } finally {
       await rm(cloudRoot, { recursive: true, force: true })
     }
+  }
+
+  console.log('\n1d. 安装名规范：中文标题不能当调用名')
+  {
+    const cases = [
+      { dir: 'travel-cn', head: '---\nname: 国内出行行程规划\ndescription: 查票\n---\nbody', want: 'travel-cn', title: '国内出行行程规划' },
+      { dir: 'hike-planner', head: '---\nname: Hike Planner\ndescription: 徒步\n---\nbody', want: 'hike-planner', title: 'Hike Planner' },
+      { dir: 'no-name', head: '---\ndescription: 缺名\n---\nbody', want: 'no-name' },
+      { dir: 'already-ok', head: '---\nname: already-ok\ndescription: 正常\n---\nbody', want: 'already-ok' },
+    ]
+    const root = join(HOME, 'name-fix-skills')
+    await mkdir(root, { recursive: true })
+    for (const item of cases) {
+      const directory = join(root, item.dir)
+      await mkdir(directory, { recursive: true })
+      await writeFile(join(directory, 'SKILL.md'), item.head, 'utf8')
+      const result = await normalizeSkillName(directory, item.dir)
+      const text = await readFile(join(directory, 'SKILL.md'), 'utf8')
+      check(`${item.dir}：调用名可被宿主接受`, result.name === item.want && isSkillName(result.name), result.name)
+      check(`${item.dir}：name 写回文件`, text.includes(`name: ${item.want}`), text.split('\n')[1])
+      if (item.title !== undefined) {
+        check(`${item.dir}：中文标题保留在 title`, text.includes(`title: ${item.title}`), text.split('\n')[2])
+      }
+      check(`${item.dir}：正文没被破坏`, text.includes('body'), text.slice(-20))
+    }
+
+    // The installed board must report the callable name, not the directory id.
+    const entry = await readManagedEntry(root, 'travel-cn', true)
+    check('已安装列表给出调用名', entry?.callName === 'travel-cn' && entry?.invocable === true, JSON.stringify(entry?.callName))
+    check('已安装列表标题仍是中文', entry?.title === '国内出行行程规划', entry?.title)
+
+    const bogus = join(root, 'still-bad')
+    await mkdir(bogus, { recursive: true })
+    await writeFile(join(bogus, 'SKILL.md'), '---\nname: 全中文\ndescription: x\n---\nbody', 'utf8')
+    const bad = await readManagedEntry(root, 'still-bad', true)
+    check('不合法调用名标成不可调用', bad?.invocable === false && bad?.callName === undefined, JSON.stringify(bad))
+    await rm(root, { recursive: true, force: true })
   }
 
   console.log('\n2. 专家 / 连接器 / 插件 tab')
